@@ -31,7 +31,7 @@
 
 <br/>
 
-[**Features**](#-features) · [**Screenshots**](#-interface) · [**Tech Stack**](#-tech-stack) · [**Getting Started**](#-getting-started) · [**Architecture**](#-architecture) · [**Contributing**](#-contributing)
+[**Features**](#-features) · [**Tech Stack**](#-tech-stack) · [**Getting Started**](#-getting-started) · [**Architecture**](#-architecture) · [**Contributing**](#-contributing)
 
 </div>
 
