@@ -231,7 +231,23 @@ export function computeStats(
     tankCapacity = 0,
     fuelType: FuelType = 'petrol',
 ): EfficiencyStat {
-    const computed = computeEntries(entries, vehicleId, tankCapacity, fuelType);
+    return computeStatsFromEntries(
+        computeEntries(entries, vehicleId, tankCapacity, fuelType),
+        vehicleId,
+        fuelType,
+    );
+}
+
+/**
+ * Aggregate stats from already-computed entries. Lets a caller run computeEntries
+ * once and derive both the enriched list and the stats from it, avoiding a second
+ * full O(n) pass (perf win for per-vehicle cards on low-end devices).
+ */
+export function computeStatsFromEntries(
+    computed: ComputedFuelEntry[],
+    vehicleId: string,
+    fuelType: FuelType = 'petrol',
+): EfficiencyStat {
 
     // ── Distance & cost (clean contributions only) ─────────────────────────
     const cleanDistance = computed.filter((e) => e.distanceDriven > 0 && !isAnomalousDistance(e));

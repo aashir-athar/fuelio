@@ -16,9 +16,10 @@ import { accentGlow, radius, space } from '@/src/theme/tokens';
 import type { ComputedFuelEntry } from '@/src/utils/fuelAlgorithm';
 import { formatCurrency, formatEfficiency, formatVolume } from '@/src/utils/format';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -114,7 +115,7 @@ export default function FuelScreen() {
                     </View>
                 </View>
             ) : (
-                <FlatList
+                <FlashList
                     data={entries}
                     keyExtractor={keyExtractor}
                     renderItem={renderItem}
@@ -124,10 +125,6 @@ export default function FuelScreen() {
                         paddingBottom: insets.bottom + 120,
                     }}
                     ItemSeparatorComponent={ItemSeparator}
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={7}
-                    removeClippedSubviews
                     showsVerticalScrollIndicator={false}
                 />
             )}
