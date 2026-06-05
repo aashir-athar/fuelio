@@ -1,8 +1,22 @@
 import type { FuelEntry, ServiceEntry, Vehicle } from '../types';
 
+/** RFC 4180 line ending. */
+const EOL = '\r\n';
+
+/**
+ * Escape one CSV field.
+ *  1. CSV-injection guard: a leading =, +, -, @, tab or CR makes Excel/Sheets
+ *     treat the cell as a formula. Prefix such values with a single quote so they
+ *     render as literal text. (Applies to user free-text: nicknames, plates, notes.)
+ *  2. RFC 4180 quoting: wrap in double quotes and double any internal quotes when
+ *     the value contains a comma, quote, CR or LF.
+ */
 function escape(v: unknown): string {
-    const s = String(v ?? '');
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    let s = String(v ?? '');
+    if (/^[=+\-@\t\r]/.test(s)) {
+        s = `'${s}`;
+    }
+    if (/[",\r\n]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`;
     }
     return s;
@@ -15,7 +29,7 @@ export function vehiclesToCsv(vehicles: readonly Vehicle[]): string {
             .map(escape)
             .join(','),
     );
-    return [header, ...rows].join('\n');
+    return [header, ...rows].join(EOL);
 }
 
 export function fuelEntriesToCsv(entries: readonly FuelEntry[]): string {
@@ -35,7 +49,7 @@ export function fuelEntriesToCsv(entries: readonly FuelEntry[]): string {
             .map(escape)
             .join(','),
     );
-    return [header, ...rows].join('\n');
+    return [header, ...rows].join(EOL);
 }
 
 export function serviceEntriesToCsv(entries: readonly ServiceEntry[]): string {
@@ -56,5 +70,5 @@ export function serviceEntriesToCsv(entries: readonly ServiceEntry[]): string {
             .map(escape)
             .join(','),
     );
-    return [header, ...rows].join('\n');
+    return [header, ...rows].join(EOL);
 }

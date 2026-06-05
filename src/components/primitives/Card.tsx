@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, type ViewProps, type ViewStyle } from 'react-native';
+import { View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 
@@ -8,7 +8,7 @@ interface Props extends ViewProps {
   padded?: boolean;
   bordered?: boolean;
   children?: React.ReactNode;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
 }
 
 export const Card = React.memo(function Card({

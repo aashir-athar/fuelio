@@ -4,8 +4,17 @@ import { useActiveVehicle } from '../../hooks/useActiveVehicle';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useServiceStore } from '../../store/service.store';
 import { useSettingsStore } from '../../store/settings.store';
-import { space } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
+import { radius, space } from '../../theme/tokens';
 import type { OilGrade, OilType, ServiceType } from '../../types';
+import { formatDistance } from '../../utils/format';
+import {
+  displayToKm,
+  displayToLitres,
+  distanceUnitLabel,
+  kmToDisplay,
+  volumeUnitLabel,
+} from '../../utils/units';
 import { Button } from '../primitives/Button';
 import { Chip } from '../primitives/Chip';
 import { Input } from '../primitives/Input';
@@ -17,6 +26,7 @@ interface Props {
   onClose: () => void;
 }
 
+// Intervals are in canonical km.
 const SERVICE_TYPES: { value: ServiceType; label: string; interval: number }[] = [
   { value: 'oil-change', label: 'Oil Change', interval: 5000 },
   { value: 'tire-rotation', label: 'Tire Rotation', interval: 10000 },
@@ -37,9 +47,12 @@ const OIL_TYPES: { value: OilType; label: string }[] = [
 ];
 
 export function AddServiceSheet({ visible, onClose }: Props) {
+  const { colors } = useTheme();
   const vehicle = useActiveVehicle();
   const addEntry = useServiceStore((s) => s.addEntry);
   const currency = useSettingsStore((s) => s.currency);
+  const distanceUnit = useSettingsStore((s) => s.distanceUnit);
+  const volumeUnit = useSettingsStore((s) => s.volumeUnit);
   const haptic = useHaptics();
 
   const [type, setType] = useState<ServiceType>('oil-change');
@@ -50,29 +63,36 @@ export function AddServiceSheet({ visible, onClose }: Props) {
   const [oilQty, setOilQty] = useState('');
   const [notes, setNotes] = useState('');
 
-  React.useEffect(() => {
-    if (visible && vehicle) setOdometer(String(vehicle.odometer));
-  }, [visible, vehicle]);
+  // Re-seed the odometer each time the sheet opens (render-time reset; no setState-in-effect).
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible && vehicle) setOdometer(String(Math.round(kmToDisplay(vehicle.odometer, distanceUnit))));
+  }
 
   const selectedType = useMemo(() => SERVICE_TYPES.find((t) => t.value === type), [type]);
   const odoNum = parseFloat(odometer) || 0;
   const costNum = parseFloat(cost) || 0;
-  const nextDue = odoNum && selectedType ? odoNum + selectedType.interval : undefined;
+  const odoCanonical = displayToKm(odoNum, distanceUnit);
+  const nextDueCanonical = odoNum > 0 && selectedType ? odoCanonical + selectedType.interval : undefined;
   const canSave = odoNum > 0 && costNum >= 0 && vehicle !== null;
 
   const handleSave = () => {
     if (!canSave || !vehicle) return;
+    const qty = parseFloat(oilQty);
     addEntry({
       vehicleId: vehicle.id,
       type,
       date: Date.now(),
-      odometer: odoNum,
+      odometer: odoCanonical,
       cost: costNum,
       notes: notes.trim() || undefined,
       oilGrade: type === 'oil-change' ? oilGrade : undefined,
       oilType: type === 'oil-change' ? oilType : undefined,
-      oilQuantity: type === 'oil-change' ? parseFloat(oilQty) || undefined : undefined,
-      nextDueMileage: nextDue,
+      oilQuantity: type === 'oil-change' && Number.isFinite(qty) && qty > 0
+        ? displayToLitres(qty, volumeUnit)
+        : undefined,
+      nextDueMileage: nextDueCanonical,
     });
     haptic('success');
     setCost('');
@@ -100,12 +120,7 @@ export function AddServiceSheet({ visible, onClose }: Props) {
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
             {SERVICE_TYPES.map((t) => (
-              <Chip
-                key={t.value}
-                label={t.label}
-                selected={type === t.value}
-                onPress={() => setType(t.value)}
-              />
+              <Chip key={t.value} label={t.label} selected={type === t.value} onPress={() => setType(t.value)} />
             ))}
           </View>
         </View>
@@ -117,7 +132,7 @@ export function AddServiceSheet({ visible, onClose }: Props) {
             keyboardType="number-pad"
             value={odometer}
             onChangeText={setOdometer}
-            suffix="km"
+            suffix={distanceUnitLabel(distanceUnit)}
             containerStyle={{ flex: 1 }}
           />
           <Input
@@ -134,9 +149,7 @@ export function AddServiceSheet({ visible, onClose }: Props) {
         {type === 'oil-change' ? (
           <>
             <View>
-              <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
-                OIL GRADE
-              </Text>
+              <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>OIL GRADE</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                 {OIL_GRADES.map((g) => (
                   <Chip key={g} label={g} selected={oilGrade === g} onPress={() => setOilGrade(g)} />
@@ -144,27 +157,20 @@ export function AddServiceSheet({ visible, onClose }: Props) {
               </View>
             </View>
             <View>
-              <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
-                OIL TYPE
-              </Text>
+              <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>OIL TYPE</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                 {OIL_TYPES.map((o) => (
-                  <Chip
-                    key={o.value}
-                    label={o.label}
-                    selected={oilType === o.value}
-                    onPress={() => setOilType(o.value)}
-                  />
+                  <Chip key={o.value} label={o.label} selected={oilType === o.value} onPress={() => setOilType(o.value)} />
                 ))}
               </View>
             </View>
             <Input
-              label="Quantity (L)"
+              label={`Quantity (${volumeUnitLabel(volumeUnit)})`}
               placeholder="4.5"
               keyboardType="decimal-pad"
               value={oilQty}
               onChangeText={setOilQty}
-              suffix="L"
+              suffix={volumeUnitLabel(volumeUnit)}
             />
           </>
         ) : null}
@@ -177,18 +183,18 @@ export function AddServiceSheet({ visible, onClose }: Props) {
           multiline
         />
 
-        {nextDue ? (
+        {nextDueCanonical ? (
           <View
             style={{
               paddingVertical: space[3],
               paddingHorizontal: space[4],
-              borderRadius: 16,
-              backgroundColor: 'rgba(182, 242, 77, 0.08)',
+              borderRadius: radius.lg,
+              backgroundColor: colors.accentSoft,
             }}
           >
             <Text variant="caption" tone="secondary">Next due at</Text>
             <Text variant="bodyLg" weight="semibold" tone="accent">
-              {nextDue.toLocaleString()} km
+              {formatDistance(nextDueCanonical, distanceUnit)}
             </Text>
           </View>
         ) : null}

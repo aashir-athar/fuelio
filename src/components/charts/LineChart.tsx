@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useTheme } from '../../theme/ThemeProvider';
-import { space } from '../../theme/tokens';
+import { duration, space } from '../../theme/tokens';
 import { Text } from '../primitives/Text';
 
 interface Props {
@@ -22,18 +23,32 @@ export const LineChart = React.memo(function LineChart({
     data, height = 180, color, formatValue,
 }: Props) {
     const { colors } = useTheme();
+    const reduceMotion = useReduceMotion();
     const [width, setWidth] = React.useState(0);
-    const progress = useSharedValue(0);
+    const progress = useSharedValue(reduceMotion ? 1 : 0);
 
     const lineColor = color ?? colors.accent;
     const maxValue = Math.max(...data.map((d) => d.value), 1);
     const minValue = Math.min(...data.map((d) => d.value), 0);
     const range = Math.max(maxValue - minValue, 1);
 
+    // Inset the plot so dots near the top/bottom edges are never clipped.
+    const inset = 6;
+    const plotHeight = height - inset * 2;
+
+    const yFor = React.useCallback(
+        (value: number) => inset + plotHeight - ((value - minValue) / range) * plotHeight,
+        [inset, plotHeight, minValue, range],
+    );
+
     React.useEffect(() => {
+        if (reduceMotion) {
+            progress.value = 1;
+            return;
+        }
         progress.value = 0;
-        progress.value = withTiming(1, { duration: 700 });
-    }, [data, progress]);
+        progress.value = withTiming(1, { duration: duration.xslow });
+    }, [data, progress, reduceMotion]);
 
     const segments = useMemo(() => {
         if (width === 0 || data.length < 2) return [];
@@ -43,9 +58,9 @@ export const LineChart = React.memo(function LineChart({
             const a = data[i]!;
             const b = data[i + 1]!;
             const ax = i * step;
-            const ay = height - ((a.value - minValue) / range) * height;
+            const ay = yFor(a.value);
             const bx = (i + 1) * step;
-            const by = height - ((b.value - minValue) / range) * height;
+            const by = yFor(b.value);
             const dx = bx - ax;
             const dy = by - ay;
             const length = Math.hypot(dx, dy);
@@ -53,7 +68,7 @@ export const LineChart = React.memo(function LineChart({
             lines.push({ x: ax, y: ay, angle, length });
         }
         return lines;
-    }, [data, width, height, minValue, range]);
+    }, [data, width, yFor]);
 
     const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
@@ -68,19 +83,21 @@ export const LineChart = React.memo(function LineChart({
     }
 
     return (
-        <View style={{ height: height + 32 }}>
+        <View style={{ height: height + 40 }}>
             <View onLayout={onLayout} style={{ height, position: 'relative', overflow: 'hidden' }}>
-                {/* Baseline gridlines */}
-                {[0.25, 0.5, 0.75].map((ratio) => (
+                {/* Horizontal gridlines */}
+                {[0, 0.5, 1].map((ratio) => (
                     <View
                         key={ratio}
+                        pointerEvents="none"
                         style={{
                             position: 'absolute',
-                            left: 0, right: 0,
-                            top: height * ratio,
+                            left: 0,
+                            right: 0,
+                            top: inset + plotHeight * ratio,
                             height: 1,
                             backgroundColor: colors.divider,
-                            opacity: 0.5,
+                            opacity: ratio === 1 ? 0.7 : 0.35,
                         }}
                     />
                 ))}
@@ -110,19 +127,19 @@ export const LineChart = React.memo(function LineChart({
                         {data.map((d, i) => {
                             const step = width / (data.length - 1);
                             const x = i * step;
-                            const y = height - ((d.value - minValue) / range) * height;
+                            const y = yFor(d.value);
                             return (
                                 <View
                                     key={i}
                                     style={{
                                         position: 'absolute',
-                                        left: x - 4,
-                                        top: y - 4,
-                                        width: 8,
-                                        height: 8,
-                                        borderRadius: 4,
+                                        left: x - 5,
+                                        top: y - 5,
+                                        width: 10,
+                                        height: 10,
+                                        borderRadius: 5,
                                         backgroundColor: colors.surface,
-                                        borderWidth: 2,
+                                        borderWidth: 2.5,
                                         borderColor: lineColor,
                                     }}
                                 />
@@ -132,7 +149,7 @@ export const LineChart = React.memo(function LineChart({
                 </Animated.View>
             </View>
             {/* X labels */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space[2] }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space[3] }}>
                 <Text variant="micro" tone="muted">{data[0]?.label}</Text>
                 {data.length > 2 ? (
                     <Text variant="micro" tone="muted">{data[Math.floor(data.length / 2)]?.label}</Text>

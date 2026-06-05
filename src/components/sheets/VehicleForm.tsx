@@ -2,9 +2,18 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { IMAGES } from '../../constants/images';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useSettingsStore } from '../../store/settings.store';
 import { useVehicleStore } from '../../store/vehicle.store';
 import { space } from '../../theme/tokens';
 import type { FuelType, Vehicle } from '../../types';
+import {
+    displayToKm,
+    displayToLitres,
+    distanceUnitLabel,
+    kmToDisplay,
+    litresToDisplay,
+    volumeUnitLabel,
+} from '../../utils/units';
 import { Avatar } from '../primitives/Avatar';
 import { Button } from '../primitives/Button';
 import { Chip } from '../primitives/Chip';
@@ -29,6 +38,8 @@ interface Props {
 export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicle', footerSlot }: Props) {
     const addVehicle = useVehicleStore((s) => s.addVehicle);
     const updateVehicle = useVehicleStore((s) => s.updateVehicle);
+    const distanceUnit = useSettingsStore((s) => s.distanceUnit);
+    const volumeUnit = useSettingsStore((s) => s.volumeUnit);
     const haptic = useHaptics();
 
     const [nickname, setNickname] = useState(initialVehicle?.nickname ?? '');
@@ -36,8 +47,8 @@ export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicl
     const [model, setModel] = useState(initialVehicle?.model ?? '');
     const [year, setYear] = useState(initialVehicle?.year ? String(initialVehicle.year) : String(new Date().getFullYear()));
     const [fuelType, setFuelType] = useState<FuelType>(initialVehicle?.fuelType ?? 'petrol');
-    const [tankCap, setTankCap] = useState(initialVehicle?.tankCapacity ? String(initialVehicle.tankCapacity) : '');
-    const [odometer, setOdometer] = useState(initialVehicle?.odometer ? String(initialVehicle.odometer) : '0');
+    const [tankCap, setTankCap] = useState(initialVehicle?.tankCapacity ? String(+litresToDisplay(initialVehicle.tankCapacity, volumeUnit).toFixed(2)) : '');
+    const [odometer, setOdometer] = useState(initialVehicle?.odometer ? String(Math.round(kmToDisplay(initialVehicle.odometer, distanceUnit))) : '0');
     const [plate, setPlate] = useState(initialVehicle?.licensePlate ?? '');
 
     const canSave = nickname.trim().length > 0 && make.trim().length > 0 && model.trim().length > 0;
@@ -50,8 +61,14 @@ export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicl
             model: model.trim(),
             year: parseInt(year, 10) || new Date().getFullYear(),
             fuelType,
-            tankCapacity: parseFloat(tankCap) || 50,
-            odometer: parseFloat(odometer) || 0,
+            tankCapacity: (() => {
+                const v = parseFloat(tankCap);
+                return Number.isFinite(v) && v > 0 ? displayToLitres(v, volumeUnit) : 50;
+            })(),
+            odometer: (() => {
+                const v = parseFloat(odometer);
+                return Number.isFinite(v) && v >= 0 ? displayToKm(v, distanceUnit) : 0;
+            })(),
             licensePlate: plate.trim() || undefined,
         };
         if (initialVehicle) {
@@ -100,8 +117,8 @@ export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicl
             </View>
 
             <View style={{ flexDirection: 'row', gap: space[3] }}>
-                <Input label="Tank (L)" placeholder="50" keyboardType="decimal-pad" value={tankCap} onChangeText={setTankCap} suffix="L" containerStyle={{ flex: 1 }} />
-                <Input label="Odometer" placeholder="0" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} suffix="km" containerStyle={{ flex: 1 }} />
+                <Input label={`Tank (${volumeUnitLabel(volumeUnit)})`} placeholder="50" keyboardType="decimal-pad" value={tankCap} onChangeText={setTankCap} suffix={volumeUnitLabel(volumeUnit)} containerStyle={{ flex: 1 }} />
+                <Input label="Odometer" placeholder="0" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} suffix={distanceUnitLabel(distanceUnit)} containerStyle={{ flex: 1 }} />
             </View>
 
             <Button label={submitLabel} onPress={handleSave} disabled={!canSave} size="lg" fullWidth style={{ marginTop: space[4] }} />

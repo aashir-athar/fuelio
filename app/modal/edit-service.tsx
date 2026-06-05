@@ -6,8 +6,17 @@ import { useHaptics } from '@/src/hooks/useHaptics';
 import { useServiceStore } from '@/src/store/service.store';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { space } from '@/src/theme/tokens';
+import { radius, space } from '@/src/theme/tokens';
 import type { OilGrade, OilType, ServiceType } from '@/src/types';
+import { formatDistance } from '@/src/utils/format';
+import {
+    displayToKm,
+    displayToLitres,
+    distanceUnitLabel,
+    kmToDisplay,
+    litresToDisplay,
+    volumeUnitLabel,
+} from '@/src/utils/units';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -67,17 +76,19 @@ export default function EditServiceModal() {
     const updateEntry = useServiceStore((s) => s.updateEntry);
     const deleteEntry = useServiceStore((s) => s.deleteEntry);
     const currency = useSettingsStore((s) => s.currency);
+    const distanceUnit = useSettingsStore((s) => s.distanceUnit);
+    const volumeUnit = useSettingsStore((s) => s.volumeUnit);
 
     const entry = entries.find((e) => e.id === id);
 
-    // ── Local form state ──────────────────────────────────────────────────────
+    // ── Local form state (canonical km/L stored; edited in the user's units) ────
     const [type, setType] = useState<ServiceType>(entry?.type ?? 'oil-change');
-    const [odometer, setOdometer] = useState(entry ? String(entry.odometer) : '');
+    const [odometer, setOdometer] = useState(entry ? String(Math.round(kmToDisplay(entry.odometer, distanceUnit))) : '');
     const [cost, setCost] = useState(entry ? String(entry.cost) : '');
     const [notes, setNotes] = useState(entry?.notes ?? '');
     const [oilGrade, setOilGrade] = useState<OilGrade>(entry?.oilGrade ?? '5W-30');
     const [oilType, setOilType] = useState<OilType>(entry?.oilType ?? 'fully-synthetic');
-    const [oilQty, setOilQty] = useState(entry?.oilQuantity ? String(entry.oilQuantity) : '');
+    const [oilQty, setOilQty] = useState(entry?.oilQuantity ? String(+litresToDisplay(entry.oilQuantity, volumeUnit).toFixed(2)) : '');
 
     // ── Validation ────────────────────────────────────────────────────────────
     const odoNum = parsePositive(odometer);
@@ -127,19 +138,21 @@ export default function EditServiceModal() {
         if (!canSave) return;
 
         const selectedServiceType = SERVICE_TYPES.find((t) => t.value === type);
+        const odoCanonical = displayToKm(odoNum, distanceUnit);
         const nextDueMileage =
-            selectedServiceType ? odoNum + selectedServiceType.interval : entry.nextDueMileage;
+            selectedServiceType ? odoCanonical + selectedServiceType.interval : entry.nextDueMileage;
+        const qty = parsePositive(oilQty);
 
         updateEntry(entry.id, {
             type,
-            odometer: odoNum,
+            odometer: odoCanonical,
             cost: costNum,
             notes: notes.trim() || undefined,
             oilGrade: type === 'oil-change' ? oilGrade : undefined,
             oilType: type === 'oil-change' ? oilType : undefined,
             oilQuantity:
-                type === 'oil-change'
-                    ? parsePositive(oilQty) || undefined
+                type === 'oil-change' && Number.isFinite(qty) && qty > 0
+                    ? displayToLitres(qty, volumeUnit)
                     : undefined,
             nextDueMileage,
         });
@@ -171,7 +184,7 @@ export default function EditServiceModal() {
     const selectedServiceType = SERVICE_TYPES.find((t) => t.value === type);
     const previewNextDue =
         !isNaN(odoNum) && odoNum > 0 && selectedServiceType
-            ? odoNum + selectedServiceType.interval
+            ? displayToKm(odoNum, distanceUnit) + selectedServiceType.interval
             : null;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -246,7 +259,7 @@ export default function EditServiceModal() {
                         keyboardType="number-pad"
                         value={odometer}
                         onChangeText={setOdometer}
-                        suffix="km"
+                        suffix={distanceUnitLabel(distanceUnit)}
                         error={odometerError}
                         containerStyle={{ flex: 1 }}
                     />
@@ -305,12 +318,12 @@ export default function EditServiceModal() {
                         </View>
 
                         <Input
-                            label="Quantity (L)"
+                            label={`Quantity (${volumeUnitLabel(volumeUnit)})`}
                             placeholder="4.5"
                             keyboardType="decimal-pad"
                             value={oilQty}
                             onChangeText={setOilQty}
-                            suffix="L"
+                            suffix={volumeUnitLabel(volumeUnit)}
                         />
                     </>
                 ) : null}
@@ -330,15 +343,15 @@ export default function EditServiceModal() {
                         style={{
                             paddingVertical: space[3],
                             paddingHorizontal: space[4],
-                            borderRadius: 16,
-                            backgroundColor: 'rgba(182, 242, 77, 0.08)',
+                            borderRadius: radius.lg,
+                            backgroundColor: colors.accentSoft,
                         }}
                     >
                         <Text variant="caption" tone="secondary">
                             Next due at
                         </Text>
                         <Text variant="bodyLg" weight="semibold" tone="accent">
-                            {previewNextDue.toLocaleString()} km
+                            {formatDistance(previewNextDue, distanceUnit)}
                         </Text>
                     </View>
                 ) : null}

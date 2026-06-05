@@ -1,6 +1,14 @@
-import React, { useCallback } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import React, { useCallback, useEffect } from 'react';
+import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -26,6 +34,9 @@ interface Props {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+const HEIGHTS: Record<Size, number> = { sm: 38, md: 48, lg: 56 };
+const PADDINGS: Record<Size, number> = { sm: space[4], md: space[5], lg: space[6] };
+
 export const Button = React.memo(function Button({
   label,
   onPress,
@@ -43,13 +54,10 @@ export const Button = React.memo(function Button({
   const haptic = useHaptics();
   const reduceMotion = useReduceMotion();
   const scale = useSharedValue(1);
-
-  const heights: Record<Size, number> = { sm: 38, md: 48, lg: 56 };
-  const paddings: Record<Size, number> = { sm: space[4], md: space[5], lg: space[6] };
+  const loadingPulse = useSharedValue(1);
 
   const bg = (() => {
     if (variant === 'primary') return colors.accent;
-    if (variant === 'danger') return 'transparent';
     if (variant === 'secondary') return colors.surfaceElevated;
     return 'transparent';
   })();
@@ -58,6 +66,22 @@ export const Button = React.memo(function Button({
   const textTone = variant === 'primary' ? 'onAccent' : variant === 'danger' ? 'danger' : 'primary';
 
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const contentStyle = useAnimatedStyle(() => ({ opacity: loadingPulse.value }));
+
+  // Loading = a gentle "breathing" pulse on the label (no spinner, per the
+  // skeleton-over-ActivityIndicator rule). Holds steady under Reduce Motion.
+  useEffect(() => {
+    if (loading && !reduceMotion) {
+      loadingPulse.value = withRepeat(
+        withTiming(0.45, { duration: 600, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(loadingPulse);
+      loadingPulse.value = loading ? 0.6 : 1;
+    }
+  }, [loading, reduceMotion, loadingPulse]);
 
   const handlePressIn = useCallback(() => {
     if (!reduceMotion) scale.value = withSpring(0.96, spring.snappy);
@@ -82,8 +106,8 @@ export const Button = React.memo(function Button({
         animStyle,
         styles.base,
         {
-          height: heights[size],
-          paddingHorizontal: paddings[size],
+          height: HEIGHTS[size],
+          paddingHorizontal: PADDINGS[size],
           backgroundColor: disabled ? colors.surfaceElevated : bg,
           borderColor,
           borderWidth: variant === 'danger' ? 1.5 : 0,
@@ -100,17 +124,13 @@ export const Button = React.memo(function Button({
         style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.textOnAccent : colors.accent} />
-      ) : (
-        <>
-          {leftIcon}
-          <Text variant={size === 'lg' ? 'bodyLg' : 'body'} weight="semibold" tone={textTone}>
-            {label}
-          </Text>
-          {rightIcon}
-        </>
-      )}
+      <Animated.View style={[styles.content, contentStyle]}>
+        {leftIcon}
+        <Text variant={size === 'lg' ? 'bodyLg' : 'body'} weight="semibold" tone={textTone}>
+          {label}
+        </Text>
+        {rightIcon}
+      </Animated.View>
     </AnimatedPressable>
   );
 });
@@ -121,6 +141,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.pill,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: space[2],
   },
 });

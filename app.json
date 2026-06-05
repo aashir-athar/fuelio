@@ -2,12 +2,11 @@
   "expo": {
     "name": "Fuelio",
     "slug": "fuelio",
-    "version": "1.1.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fuelio",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -18,7 +17,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.iamaashirathar.fuelio"
     },
@@ -38,6 +36,28 @@
           "dark": {
             "backgroundColor": "#0D1117"
           }
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#B6F24D"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Fuelio uses your location only to detect when you stop at a fuel station, so it can offer to log your fill-up. Optional and off by default.",
+          "locationAlwaysAndWhenInUsePermission": "Fuelio checks for nearby fuel stations in the background only to offer a fuel-log prompt. Optional, off by default, and you can turn it off anytime in Settings.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],

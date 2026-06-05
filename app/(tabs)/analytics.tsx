@@ -1,3 +1,5 @@
+// Lever: Peak-end + progress framing — a calm period summary up top anchors the
+// session, then honest trend tiles reward genuine efficiency gains without spin.
 import { BarChart } from '@/src/components/charts/BarChart';
 import { LineChart } from '@/src/components/charts/LineChart';
 import { Card } from '@/src/components/primitives/Card';
@@ -8,28 +10,39 @@ import { StatTile } from '@/src/components/primitives/StatTile';
 import { Text } from '@/src/components/primitives/Text';
 import { IMAGES } from '@/src/constants/images';
 import { useActiveVehicle } from '@/src/hooks/useActiveVehicle';
+import { usePartialEconomyEstimate } from '@/src/hooks/usePartialEstimate';
 import { useVehicleStats } from '@/src/hooks/useVehicleStats';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { space } from '@/src/theme/tokens';
+import { radius, space } from '@/src/theme/tokens';
 import { formatCurrency, formatDistance, formatEfficiency, formatNumber } from '@/src/utils/format';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Range = 'month' | 'quarter' | 'year' | 'all';
 
+const TREND_LABEL: Record<'improving' | 'declining' | 'stable', string> = {
+    improving: 'Improving',
+    declining: 'Declining',
+    stable: 'Steady',
+};
+
 export default function AnalyticsScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const vehicle = useActiveVehicle();
     const stats = useVehicleStats(vehicle?.id);
-    const { currency, distanceUnit } = useSettingsStore();
+    const partialEstimate = usePartialEconomyEstimate(vehicle?.id);
+    const currency = useSettingsStore((s) => s.currency);
+    const distanceUnit = useSettingsStore((s) => s.distanceUnit);
     const [range, setRange] = useState<Range>('month');
+    // Captured once at mount (lazy init) so range filtering stays pure during render.
+    const [now] = useState(() => Date.now());
 
     const filtered = useMemo(() => {
         if (!stats) return [];
-        const now = Date.now();
         const day = 86400000;
         const cutoff =
             range === 'month' ? now - 30 * day :
@@ -37,7 +50,7 @@ export default function AnalyticsScreen() {
                     range === 'year' ? now - 365 * day :
                         0;
         return stats.entries.filter((e) => e.date >= cutoff);
-    }, [stats, range]);
+    }, [stats, range, now]);
 
     const efficiencyPoints = useMemo(
         () => filtered
@@ -58,26 +71,34 @@ export default function AnalyticsScreen() {
         return Array.from(map.entries()).map(([label, value]) => ({ label, value }));
     }, [filtered]);
 
+    // Period aggregates — memoized so they are not recomputed on every render
+    // (theme toggles, unrelated state). Cost-per-km only counts entries that have
+    // an associated distance; the first-ever entry has distanceDriven=0 (no prior
+    // odometer baseline) and would otherwise inflate cost-per-km by up to 70%.
+    const period = useMemo(() => {
+        const totalCost = filtered.reduce((acc, e) => acc + e.totalCost, 0);
+        const totalDist = filtered.reduce((acc, e) => acc + e.distanceDriven, 0);
+        const costable = filtered.filter((e) => e.distanceDriven > 0);
+        const costableAmount = costable.reduce((acc, e) => acc + e.totalCost, 0);
+        const costableDist = costable.reduce((acc, e) => acc + e.distanceDriven, 0);
+        const costPerKm = costableDist > 0 ? costableAmount / costableDist : 0;
+        return { totalCost, totalDist, costPerKm };
+    }, [filtered]);
+
     if (!vehicle) return null;
 
     const s = stats?.stats;
-    
-    const rangeTotalCost = filtered.reduce((acc, e) => acc + e.totalCost, 0);
-    const rangeTotalDist = filtered.reduce((acc, e) => acc + e.distanceDriven, 0);
-    // Cost-per-km: only include entries that have an associated distance.
-    // The first-ever entry has distanceDriven=0 (no previous odometer baseline) so its
-    // cost must not be counted — including it inflates cost-per-km by up to 70%.
-    const rangeCostableEntries = filtered.filter((e) => e.distanceDriven > 0);
-    const rangeCostableAmount = rangeCostableEntries.reduce((acc, e) => acc + e.totalCost, 0);
-    const rangeCostableDist = rangeCostableEntries.reduce((acc, e) => acc + e.distanceDriven, 0);
-    const rangeCostPerKm = rangeCostableDist > 0 ? rangeCostableAmount / rangeCostableDist : 0;
 
-    const trendArrow =
-        s?.efficiencyTrend === 'improving' ? '↑' :
-            s?.efficiencyTrend === 'declining' ? '↓' : '→';
-    const trendTone =
-        s?.efficiencyTrend === 'improving' ? 'success' :
-            s?.efficiencyTrend === 'declining' ? 'warning' : 'secondary';
+    const trend = s?.efficiencyTrend ?? 'stable';
+    const trendIcon =
+        trend === 'improving' ? 'trending-up' :
+            trend === 'declining' ? 'trending-down' : 'remove';
+    const trendTone: 'success' | 'warning' | 'primary' =
+        trend === 'improving' ? 'success' :
+            trend === 'declining' ? 'warning' : 'primary';
+    const trendColor =
+        trend === 'improving' ? colors.success :
+            trend === 'declining' ? colors.warning : colors.textSecondary;
 
     return (
         <ScrollView
@@ -103,32 +124,56 @@ export default function AnalyticsScreen() {
                 onChange={setRange}
             />
 
+            {s && s.computableEntryCount === 0 && partialEstimate ? (
+                <Card elevated style={{ marginTop: space[4], gap: space[2] }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text variant="label" tone="secondary">ESTIMATED ECONOMY</Text>
+                        <View style={{ paddingHorizontal: space[2], paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.accentSoft }}>
+                            <Text variant="micro" tone="accent" weight="semibold">
+                                {`${partialEstimate.confidenceLabel.toUpperCase()} CONFIDENCE`}
+                            </Text>
+                        </View>
+                    </View>
+                    <Text variant="display" tone="accent">
+                        {formatEfficiency(partialEstimate.economyCentral, distanceUnit)}
+                    </Text>
+                    <Text variant="caption" tone="secondary">
+                        {`Range ${formatNumber(partialEstimate.economyMin, 1)}–${formatEfficiency(partialEstimate.economyMax, distanceUnit)} · tightens with every km`}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                        Estimated from partial fills. Log one full tank, or set the tank level when you fill, for an exact number.
+                    </Text>
+                </Card>
+            ) : null}
+
             {filtered.length === 0 ? (
-                <EmptyState
-                    image={IMAGES.analysis}
-                    title="Not enough data yet"
-                    subtitle="Log a few fill-ups to unlock beautiful trends and spending insights."
-                />
+                <View style={{ marginTop: space[6] }}>
+                    <EmptyState
+                        image={IMAGES.analysis}
+                        title="Not enough data yet"
+                        subtitle="Log a few fill-ups to unlock beautiful trends and spending insights."
+                    />
+                </View>
             ) : (
                 <>
                     {/* Period overview */}
                     <View style={{ flexDirection: 'row', gap: space[3], marginTop: space[4] }}>
                         <StatTile
                             label="Spent"
-                            value={formatCurrency(rangeTotalCost, currency)}
+                            value={formatCurrency(period.totalCost, currency)}
                             tone="accent"
                             compact
                             style={{ flex: 1 }}
                         />
                         <StatTile
                             label="Distance"
-                            value={formatDistance(rangeTotalDist, distanceUnit)}
+                            value={formatDistance(period.totalDist, distanceUnit)}
                             compact
                             style={{ flex: 1 }}
                         />
                         <StatTile
                             label="Cost/km"
-                            value={formatCurrency(rangeCostPerKm, currency, 2)}
+                            value={formatCurrency(period.costPerKm, currency, 2)}
                             tone="warning"
                             compact
                             style={{ flex: 1 }}
@@ -159,8 +204,9 @@ export default function AnalyticsScreen() {
                     <SectionHeader title="Efficiency" />
                     <View style={{ flexDirection: 'row', gap: space[3] }}>
                         <StatTile
-                            label="Weighted avg"
+                            label="Avg economy"
                             value={s ? formatEfficiency(s.averageEfficiency, distanceUnit) : '—'}
+                            caption="distance-weighted"
                             tone="accent"
                             compact
                             style={{ flex: 1 }}
@@ -173,21 +219,30 @@ export default function AnalyticsScreen() {
                             style={{ flex: 1 }}
                         />
                     </View>
-                    <View style={{ flexDirection: 'row', gap: space[3], marginTop: space[3] }}>
-                        <StatTile
-                            label="Accurate avg"
-                            value={s ? formatEfficiency(s.accurateAverageEfficiency, distanceUnit) : '—'}
-                            compact
-                            style={{ flex: 1 }}
-                        />
-                        <StatTile
-                            label={`Trend ${trendArrow}`}
-                            value={s?.efficiencyTrend ?? '—'}
-                            tone={trendTone as any}
-                            compact
-                            style={{ flex: 1 }}
-                        />
-                    </View>
+
+                    {/* Trend — honest direction read, no fabricated precision */}
+                    <Card style={{ marginTop: space[3] }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+                            <View
+                                style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: radius.md,
+                                    backgroundColor: colors.surfaceElevated,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <Ionicons name={trendIcon} size={22} color={trendColor} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text variant="label" tone="secondary">EFFICIENCY TREND</Text>
+                                <Text variant="heading" tone={trendTone} style={{ marginTop: 2 }}>
+                                    {TREND_LABEL[trend]}
+                                </Text>
+                            </View>
+                        </View>
+                    </Card>
 
                     {/* Lifetime */}
                     <SectionHeader title="Lifetime" />

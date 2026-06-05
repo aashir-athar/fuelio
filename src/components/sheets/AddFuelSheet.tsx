@@ -4,8 +4,17 @@ import { useActiveVehicle } from '../../hooks/useActiveVehicle';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useFuelStore } from '../../store/fuel.store';
 import { useSettingsStore } from '../../store/settings.store';
-import { space } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
+import { radius, space } from '../../theme/tokens';
 import { formatCurrency } from '../../utils/format';
+import {
+    displayToKm,
+    displayToLitres,
+    displayToPricePerLitre,
+    distanceUnitLabel,
+    kmToDisplay,
+    volumeUnitLabel,
+} from '../../utils/units';
 import { Button } from '../primitives/Button';
 import { Chip } from '../primitives/Chip';
 import { Input } from '../primitives/Input';
@@ -17,45 +26,65 @@ interface Props {
     onClose: () => void;
 }
 
+/** Fuel-gauge marks for the optional "tank level after a partial fill" input. */
+const TANK_LEVELS = [
+    { label: '¼', value: 0.25 },
+    { label: '½', value: 0.5 },
+    { label: '¾', value: 0.75 },
+    { label: 'Full', value: 1 },
+] as const;
+
 export function AddFuelSheet({ visible, onClose }: Props) {
+    const { colors } = useTheme();
     const vehicle = useActiveVehicle();
     const addEntry = useFuelStore((s) => s.addEntry);
     const currency = useSettingsStore((s) => s.currency);
     const volumeUnit = useSettingsStore((s) => s.volumeUnit);
+    const distanceUnit = useSettingsStore((s) => s.distanceUnit);
     const haptic = useHaptics();
 
+    // Odometer is stored canonical (km); show it in the user's distance unit.
+    const seedOdometer = vehicle ? String(Math.round(kmToDisplay(vehicle.odometer, distanceUnit))) : '';
     const [liters, setLiters] = useState('');
     const [price, setPrice] = useState('');
-    const [odometer, setOdometer] = useState(vehicle ? String(vehicle.odometer) : '');
+    const [odometer, setOdometer] = useState(seedOdometer);
     const [fullTank, setFullTank] = useState(true);
+    const [tankLevel, setTankLevel] = useState<number | null>(null);
     const [notes, setNotes] = useState('');
 
     const litersNum = parseFloat(liters) || 0;
     const priceNum = parseFloat(price) || 0;
     const odoNum = parseFloat(odometer) || 0;
-    // Use multiply-round-divide instead of toFixed to avoid floating-point drift
+    // Cost is unit-invariant: gallons × price/gallon === litres × price/litre.
     const total = Math.round(litersNum * priceNum * 100) / 100;
     const canSave = litersNum > 0 && priceNum > 0 && odoNum > 0 && vehicle !== null;
 
-    React.useEffect(() => {
-        if (visible && vehicle) setOdometer(String(vehicle.odometer));
-    }, [visible, vehicle]);
+    // Re-seed the odometer each time the sheet opens (React render-time reset pattern;
+    // avoids calling setState inside an effect).
+    const [wasVisible, setWasVisible] = useState(visible);
+    if (visible !== wasVisible) {
+        setWasVisible(visible);
+        if (visible && vehicle) setOdometer(seedOdometer);
+    }
 
     const handleSave = () => {
         if (!canSave || !vehicle) return;
         addEntry({
             vehicleId: vehicle.id,
             date: Date.now(),
-            liters: litersNum,
-            pricePerLiter: priceNum,
-            odometer: odoNum,
+            // Convert the user's display units back to canonical before storing.
+            liters: displayToLitres(litersNum, volumeUnit),
+            pricePerLiter: displayToPricePerLitre(priceNum, volumeUnit),
+            odometer: displayToKm(odoNum, distanceUnit),
             fullTank,
+            tankLevelAfter: !fullTank && tankLevel != null ? tankLevel : undefined,
             notes: notes.trim() || undefined,
         });
         haptic('success');
         setLiters('');
         setPrice('');
         setNotes('');
+        setTankLevel(null);
         onClose();
     };
 
@@ -79,11 +108,11 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                         keyboardType="decimal-pad"
                         value={liters}
                         onChangeText={setLiters}
-                        suffix={volumeUnit === 'gallon' ? 'gal' : 'L'}
+                        suffix={volumeUnitLabel(volumeUnit)}
                         containerStyle={{ flex: 1 }}
                     />
                     <Input
-                        label={`Price per ${volumeUnit === 'gallon' ? 'gallon' : 'liter'}`}
+                        label={`Price / ${volumeUnitLabel(volumeUnit)}`}
                         placeholder="0.00"
                         keyboardType="decimal-pad"
                         value={price}
@@ -99,17 +128,41 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                     keyboardType="number-pad"
                     value={odometer}
                     onChangeText={setOdometer}
-                    suffix="km"
+                    suffix={distanceUnitLabel(distanceUnit)}
                 />
 
-                <View style={{ flexDirection: 'row', gap: space[2] }}>
-                    <Chip label="Full tank" selected={fullTank} onPress={() => setFullTank(true)} />
-                    <Chip label="Partial fill" selected={!fullTank} onPress={() => setFullTank(false)} />
+                <View>
+                    <View style={{ flexDirection: 'row', gap: space[2] }}>
+                        <Chip label="Full tank" selected={fullTank} onPress={() => setFullTank(true)} />
+                        <Chip label="Partial fill" selected={!fullTank} onPress={() => setFullTank(false)} />
+                    </View>
+                    <Text variant="caption" tone="muted" style={{ marginTop: space[2] }}>
+                        {fullTank
+                            ? 'Filled to the top — this is what measures your real economy.'
+                            : 'Set the tank level after filling for an exact reading, or leave it and it rolls into your next full tank.'}
+                    </Text>
+                    {fullTank ? null : (
+                        <View style={{ marginTop: space[3] }}>
+                            <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
+                                TANK LEVEL NOW (OPTIONAL)
+                            </Text>
+                            <View style={{ flexDirection: 'row', gap: space[2] }}>
+                                {TANK_LEVELS.map((l) => (
+                                    <Chip
+                                        key={l.value}
+                                        label={l.label}
+                                        selected={tankLevel === l.value}
+                                        onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
+                                    />
+                                ))}
+                            </View>
+                        </View>
+                    )}
                 </View>
 
                 <Input
                     label="Notes (optional)"
-                    placeholder="Gas station name, route, anything..."
+                    placeholder="Station, route, anything worth remembering"
                     value={notes}
                     onChangeText={setNotes}
                     multiline
@@ -119,8 +172,8 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                     style={{
                         paddingVertical: space[4],
                         paddingHorizontal: space[5],
-                        borderRadius: 16,
-                        backgroundColor: 'rgba(182, 242, 77, 0.08)',
+                        borderRadius: radius.lg,
+                        backgroundColor: colors.accentSoft,
                         alignItems: 'center',
                     }}
                 >

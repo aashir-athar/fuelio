@@ -190,7 +190,11 @@ const styles = StyleSheet.create({
     minHeight: 48,           // WCAG touch target
   },
   activePill: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderRadius: 24,
     marginHorizontal: 2,
   },
@@ -203,7 +207,6 @@ const styles = StyleSheet.create({
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 export default function TabsLayout() {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   // The pill is 64 pt tall + floatGap (12) + safe-area bottom + a tiny extra

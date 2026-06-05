@@ -7,11 +7,28 @@ import { useFuelStore } from '@/src/store/fuel.store';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
 import { space } from '@/src/theme/tokens';
+import {
+    displayToKm,
+    displayToLitres,
+    displayToPricePerLitre,
+    distanceUnitLabel,
+    kmToDisplay,
+    litresToDisplay,
+    pricePerLitreToDisplay,
+    volumeUnitLabel,
+} from '@/src/utils/units';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const TANK_LEVELS = [
+    { label: '¼', value: 0.25 },
+    { label: '½', value: 0.5 },
+    { label: '¾', value: 0.75 },
+    { label: 'Full', value: 1 },
+] as const;
 
 export default function EditFuelModal() {
     const { colors } = useTheme();
@@ -22,13 +39,17 @@ export default function EditFuelModal() {
     const updateEntry = useFuelStore((s) => s.updateEntry);
     const deleteEntry = useFuelStore((s) => s.deleteEntry);
     const currency = useSettingsStore((s) => s.currency);
+    const volumeUnit = useSettingsStore((s) => s.volumeUnit);
+    const distanceUnit = useSettingsStore((s) => s.distanceUnit);
     const haptic = useHaptics();
 
     const entry = entries.find((e) => e.id === id);
-    const [liters, setLiters] = useState(entry ? String(entry.liters) : '');
-    const [price, setPrice] = useState(entry ? String(entry.pricePerLiter) : '');
-    const [odometer, setOdometer] = useState(entry ? String(entry.odometer) : '');
+    // Stored canonical (L, price/L, km); edit in the user's chosen units.
+    const [liters, setLiters] = useState(entry ? String(+litresToDisplay(entry.liters, volumeUnit).toFixed(2)) : '');
+    const [price, setPrice] = useState(entry ? String(+pricePerLitreToDisplay(entry.pricePerLiter, volumeUnit).toFixed(3)) : '');
+    const [odometer, setOdometer] = useState(entry ? String(Math.round(kmToDisplay(entry.odometer, distanceUnit))) : '');
     const [fullTank, setFullTank] = useState(entry?.fullTank ?? true);
+    const [tankLevel, setTankLevel] = useState<number | null>(entry?.tankLevelAfter ?? null);
     const [notes, setNotes] = useState(entry?.notes ?? '');
 
     if (!entry) {
@@ -48,16 +69,19 @@ export default function EditFuelModal() {
         const parsedOdometer = parseFloat(odometer);
 
         updateEntry(entry.id, {
+            // Convert valid display-unit input back to canonical; keep the existing
+            // canonical value when the field is blank/invalid (don't revert a typed 0).
             liters: Number.isFinite(parsedLiters) && parsedLiters > 0
-                ? parsedLiters
+                ? displayToLitres(parsedLiters, volumeUnit)
                 : entry.liters,
             pricePerLiter: Number.isFinite(parsedPrice) && parsedPrice >= 0
-                ? parsedPrice
+                ? displayToPricePerLitre(parsedPrice, volumeUnit)
                 : entry.pricePerLiter,
             odometer: Number.isFinite(parsedOdometer) && parsedOdometer >= 0
-                ? parsedOdometer
+                ? displayToKm(parsedOdometer, distanceUnit)
                 : entry.odometer,
             fullTank,
+            tankLevelAfter: !fullTank && tankLevel != null ? tankLevel : undefined,
             notes: notes.trim() || undefined,
         });
         haptic('success');
@@ -99,14 +123,31 @@ export default function EditFuelModal() {
                 keyboardShouldPersistTaps="handled"
             >
                 <View style={{ flexDirection: 'row', gap: space[3] }}>
-                    <Input label="Liters" keyboardType="decimal-pad" value={liters} onChangeText={setLiters} suffix="L" containerStyle={{ flex: 1 }} />
-                    <Input label="Price" keyboardType="decimal-pad" value={price} onChangeText={setPrice} suffix={currency} containerStyle={{ flex: 1 }} />
+                    <Input label={volumeUnit === 'gallon' ? 'Gallons' : 'Liters'} keyboardType="decimal-pad" value={liters} onChangeText={setLiters} suffix={volumeUnitLabel(volumeUnit)} containerStyle={{ flex: 1 }} />
+                    <Input label={`Price / ${volumeUnitLabel(volumeUnit)}`} keyboardType="decimal-pad" value={price} onChangeText={setPrice} suffix={currency} containerStyle={{ flex: 1 }} />
                 </View>
-                <Input label="Odometer" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} suffix="km" />
+                <Input label="Odometer" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} suffix={distanceUnitLabel(distanceUnit)} />
                 <View style={{ flexDirection: 'row', gap: space[2] }}>
                     <Chip label="Full tank" selected={fullTank} onPress={() => setFullTank(true)} />
                     <Chip label="Partial" selected={!fullTank} onPress={() => setFullTank(false)} />
                 </View>
+                {fullTank ? null : (
+                    <View>
+                        <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
+                            TANK LEVEL NOW (OPTIONAL)
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: space[2] }}>
+                            {TANK_LEVELS.map((l) => (
+                                <Chip
+                                    key={l.value}
+                                    label={l.label}
+                                    selected={tankLevel === l.value}
+                                    onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
+                                />
+                            ))}
+                        </View>
+                    </View>
+                )}
                 <Input label="Notes" value={notes} onChangeText={setNotes} multiline />
                 <Button label="Save changes" onPress={handleSave} size="lg" fullWidth />
                 <Button label="Delete entry" onPress={handleDelete} variant="danger" fullWidth />

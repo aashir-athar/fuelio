@@ -31,6 +31,12 @@ export interface FuelEntry {
     pricePerLiter: number;
     odometer: number;
     fullTank: boolean;
+    /**
+     * Optional tank fill level (0..1 fraction of capacity) just AFTER this fill.
+     * When set on a partial fill, it turns that fill into an exact measurement point
+     * (a full fill is implicitly 1.0). Lets partial-only drivers get exact economy.
+     */
+    tankLevelAfter?: number;
     notes?: string;
     receiptUri?: string;
     // Computed — stored to avoid recalculation on every render
@@ -86,11 +92,13 @@ export type TimeRange = 'week' | 'month' | 'year' | 'all';
 
 export interface EfficiencyStat {
     vehicleId: string;
-    // Weighted average (totalDistance / totalFuel) — statistically correct
+    // Distance-weighted average over full-to-full windows: Σ(window distance) / Σ(window fuel).
+    // Statistically correct — short windows do not over-weight the result.
     averageEfficiency: number;
     bestEfficiency: number;
     worstEfficiency: number;
-    // Accurate-only sub-stats (full-tank-window entries only, no estimates)
+    // Retained for API compatibility. In v3 every counted window is a clean measurement,
+    // so these mirror the main stats.
     accurateAverageEfficiency: number;
     accurateBestEfficiency: number;
     accurateWorstEfficiency: number;
@@ -102,7 +110,7 @@ export interface EfficiencyStat {
     totalDistance: number;
     totalFuel: number;
     totalCost: number;
-    // costPerKm excludes first entry's cost (no distance baseline)
+    // Cost per distance over clean entries only (excludes zero-distance and odometer-anomaly fills).
     costPerKm: number;
     // Environmental
     estimatedCO2kg: number;

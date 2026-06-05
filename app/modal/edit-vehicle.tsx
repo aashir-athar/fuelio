@@ -2,8 +2,6 @@ import { Button } from '@/src/components/primitives/Button';
 import { Text } from '@/src/components/primitives/Text';
 import { VehicleForm } from '@/src/components/sheets/VehicleForm';
 import { useHaptics } from '@/src/hooks/useHaptics';
-import { useFuelStore } from '@/src/store/fuel.store';
-import { useServiceStore } from '@/src/store/service.store';
 import { useVehicleStore } from '@/src/store/vehicle.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
 import { space } from '@/src/theme/tokens';
@@ -11,19 +9,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditVehicleModal() {
     const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
     const router = useRouter();
     const haptic = useHaptics();
     const { id } = useLocalSearchParams<{ id: string }>();
 
     const vehicles = useVehicleStore((s) => s.vehicles);
     const deleteVehicle = useVehicleStore((s) => s.deleteVehicle);
-    const deleteVehicleFuel = useFuelStore((s) => s.deleteForVehicle);
-    const deleteVehicleService = useServiceStore((s) => s.deleteForVehicle);
 
     const vehicle = vehicles.find((v) => v.id === id);
 
@@ -46,8 +40,7 @@ export default function EditVehicleModal() {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: () => {
-                        deleteVehicleFuel(vehicle.id);
-                        deleteVehicleService(vehicle.id);
+                        // Cascade (fuel + service) is enforced inside the store.
                         deleteVehicle(vehicle.id);
                         haptic('warning');
                         router.back();

@@ -73,14 +73,19 @@ export const shadow = {
     shadowRadius: 28,
     elevation: 14,
   },
-  accent: {
-    shadowColor: '#B6F24D',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    elevation: 10,
-  },
 } as const;
+
+/**
+ * Brand-colored glow for accent surfaces. A function (not a static token) so the
+ * color always tracks the active theme's accent instead of hardcoding one mode.
+ */
+export const accentGlow = (color: string) => ({
+  shadowColor: color,
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.22,
+  shadowRadius: 20,
+  elevation: 10,
+});
 
 /**
  * Spring presets tuned for 2026 motion language.

@@ -1,58 +1,37 @@
 import type { EfficiencyStat, FuelEntry, FuelType } from '../types';
 
 /**
- * The Fuelio Fuel Algorithm - v2.2
+ * The Fuelio Fuel Algorithm — v3 (full-to-full window method).
  *
- * Efficiency strategies:
+ * Fuel economy can only be measured between two FULL-tank fills. This is the
+ * methodology used by Fuelly, Spritmonitor and fleet software, and it is the only
+ * statistically honest one:
  *
- * 1. Full-tank window method (accurate, isEfficiencyEstimated = false):
- *    Between two consecutive full-tank fills, sum all liters poured in the
- *    window and divide by the total distance. Matches fleet-software accuracy.
+ *   • A FULL fill marks a known tank level (brim-full).
+ *   • Any PARTIAL fills after it do NOT get their own economy — their fuel is
+ *     "banked" and rolls forward into the next window.
+ *   • The next FULL fill CLOSES the window. The fuel added across the whole window
+ *     (banked partials + the closing fill) exactly equals the fuel burned over the
+ *     window's distance, because the tank went full → full:
  *
- * 2. First-fill fallback (estimated, isEfficiencyEstimated = true):
- *    When a full-tank fill has no prior full-tank anchor (e.g. the user's very
- *    first logged entry was a partial fill), the first-ever entry is used as a
- *    proxy anchor. All fuel since that entry is known, but the initial tank
- *    level is not -- result is flagged estimated.
+ *        economy(km/L) = (odoClose − odoAnchor) / (Σ partials in window + closingFill)
  *
- * 3. Simple fill method (estimated, isEfficiencyEstimated = true):
- *    For partial fills with a prior entry, compute distanceDriven / liters.
- *    Shown with a "~" prefix in the UI to signal approximation.
+ *   • The very first fill (or any fill before the first full one) only establishes
+ *     a baseline — no economy is produced, and its fuel is not attributed to a window.
  *
- * Bug fixes over v2:
- *
- *  FIX A -- first-partial-entry starves subsequent full-tank fills:
- *    If the user's very first log entry is a partial fill, the subsequent
- *    full-tank fill would find no full-tank anchor (anchorIdx = -1) and
- *    produce no efficiency value -- silently discarding real data.
- *    Fix: fall back to vehicleEntries[0] as proxy anchor, mark isEstimated=true.
- *    The loop already accumulates partial-fill liters including entry[0].liters,
- *    so no double-addition is needed in the post-loop anchor assignment.
- *
- *  FIX B -- regressed-odometer entry used as anchor and its fuel not counted:
- *    A fill flagged odometer_regression had two problems:
- *    (a) It was accepted as a full-tank anchor despite having an unreliable odometer.
- *    (b) Its liters were not added to the running sum when it was a full-tank fill
- *        (the guard was `if (!mid.fullTank) litersSum += mid.liters`), meaning
- *        fuel actually consumed in the window was omitted from the denominator.
- *    Fix: always add mid.liters for any regression entry regardless of fullTank status,
- *    then continue the search for a clean (non-regression) full-tank anchor.
- *
- *  FIX C -- anomalous entries inflate costPerKm in computeStats:
- *    computed.slice(1) included regression entries (distanceDriven=0) in the
- *    costable set. Their cost inflated the numerator while their zero distance
- *    contributed nothing to the denominator -- overstating costPerKm by up to 90%.
- *    Fix: filter costableEntries to distanceDriven > 0 with no odometer anomaly.
- *
- *  FIX D -- simple fill method divided by the wrong entry's liters:
- *    Strategy 2 (partial fills / second entry onward) computed efficiency as
- *    distance / entry.liters, using the CURRENT fill's liters. This is incorrect:
- *    the distance driven since the last stop was powered by the PREVIOUS entry's
- *    fuel, not the fuel being added now.
- *    Fix: use prev.liters as the denominator instead of entry.liters.
- *    Example: Entry A fills 30 L → drive 300 km → Entry B fills 20 L.
- *    Correct:  300 km / 30 L = 10 km/L  (fuel that moved the car)
- *    Wrong:    300 km / 20 L = 15 km/L  (fuel just poured in, not yet burned)
+ * Design choices vs. the v2 algorithm this replaces:
+ *   1. Entries are sorted by ODOMETER (date as tiebreak), not by date — odometer is
+ *      the physically monotonic axis, so legitimately back-dated fills are no longer
+ *      misflagged as odometer regressions and silently dropped.
+ *   2. PARTIAL fills never fabricate a per-fill economy number (the old
+ *      `distance / prevLiters` estimate was physically meaningless and polluted the
+ *      headline average). They bank into the open window instead.
+ *   3. `averageEfficiency` is DISTANCE-WEIGHTED (Σ window distance / Σ window fuel),
+ *      not a mean-of-ratios — short windows no longer over-weight the average.
+ *   4. Anomalous windows (excessive distance, implausible economy, overfill) are
+ *      excluded from every aggregate, not merely flagged.
+ *   5. EVs short-circuit volumetric economy entirely (km/L is meaningless for them);
+ *      distance, cost and intervals still compute.
  */
 
 // ---------------------------------------------------------------------------
@@ -62,16 +41,19 @@ import type { EfficiencyStat, FuelEntry, FuelType } from '../types';
 /** Max plausible km driven between any two consecutive fills. */
 const MAX_PLAUSIBLE_DISTANCE_KM = 3000;
 
+/** Max plausible days between fills (older gaps are treated as outliers). */
+const MAX_PLAUSIBLE_INTERVAL_DAYS = 365;
+
 /** Plausible efficiency bounds by fuel type (km/L). */
 const EFFICIENCY_BOUNDS: Record<FuelType, { min: number; max: number }> = {
     petrol: { min: 3, max: 35 },
     diesel: { min: 4, max: 40 },
     hybrid: { min: 8, max: 55 },
     cng: { min: 5, max: 40 },
-    ev: { min: 0, max: 0 }, // EVs don't use liters -- skip efficiency check
+    ev: { min: 0, max: 0 }, // EVs don't use litres — volumetric economy is skipped entirely
 };
 
-/** CO2 emission factors in kg per liter (IPCC AR5 factors). */
+/** CO2 emission factors in kg per litre (IPCC AR5 / DEFRA). */
 const CO2_KG_PER_LITER: Record<FuelType, number> = {
     petrol: 2.31,
     diesel: 2.68,
@@ -85,18 +67,28 @@ const CO2_KG_PER_LITER: Record<FuelType, number> = {
 // ---------------------------------------------------------------------------
 
 export type AnomalyReason =
-    | 'odometer_regression'    // odometer went backwards vs previous entry
-    | 'duplicate_odometer'     // same odometer as previous (distance = 0)
-    | 'excessive_distance'     // implausibly large distance since last fill
-    | 'overfill'               // liters > tank capacity
-    | 'implausible_efficiency' // computed efficiency outside physical bounds
+    | 'odometer_regression'    // odometer went backwards vs the previous entry
+    | 'duplicate_odometer'     // same odometer as the previous entry (distance = 0)
+    | 'excessive_distance'     // implausibly large distance since the last fill
+    | 'overfill'               // litres > tank capacity (+ tolerance)
+    | 'implausible_efficiency'; // computed window economy outside physical bounds
 
 export interface ComputedFuelEntry extends FuelEntry {
+    /** km since the previous entry (clamped ≥ 0). */
     distanceDriven: number;
-    efficiency: number;             // km/L, 0 when not computable
-    isEfficiencyValid: boolean;     // true whenever a value can be shown
-    isEfficiencyEstimated: boolean; // true = partial-fill or no-full-anchor approximation
-    anomalies: AnomalyReason[];     // empty when entry looks correct
+    /** km/L for the window this fill CLOSES; 0 for partials / non-closing fills. */
+    efficiency: number;
+    /** true only for a measured full-to-full closing fill. */
+    isEfficiencyValid: boolean;
+    /** Retained for API compatibility. v3 never fabricates estimates, so always false. */
+    isEfficiencyEstimated: boolean;
+    anomalies: AnomalyReason[];
+    /** km spanned by the window this fill closes (0 if it closes none). */
+    windowDistance: number;
+    /** litres of fuel attributed to the window this fill closes (0 if none). */
+    windowFuel: number;
+    /** true if this fill closed an exact measurement window (full-tank or known tank level). */
+    isFullTankClosing: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,11 +96,11 @@ export interface ComputedFuelEntry extends FuelEntry {
 // ---------------------------------------------------------------------------
 
 /**
- * Enrich raw entries with distance, efficiency, and anomaly flags.
- * Pure function -- safe to memoize.
+ * Enrich raw entries with per-entry distance, full-to-full window economy, and
+ * anomaly flags. Pure function — safe to memoize.
  *
- * @param tankCapacity - vehicle tank size in liters (used for overfill check)
- * @param fuelType     - used for CO2 and plausibility bounds
+ * @param tankCapacity vehicle tank size in litres (overfill check; 0 = unknown)
+ * @param fuelType     CO2 factor + plausibility bounds; 'ev' skips economy
  */
 export function computeEntries(
     entries: readonly FuelEntry[],
@@ -116,120 +108,88 @@ export function computeEntries(
     tankCapacity = 0,
     fuelType: FuelType = 'petrol',
 ): ComputedFuelEntry[] {
+    const isEV = fuelType === 'ev';
+    const bounds = EFFICIENCY_BOUNDS[fuelType];
+
+    // Sort by odometer (physical axis), date as tiebreak. Guarantees non-negative
+    // distances for correctly-entered data regardless of log/date order.
     const vehicleEntries = entries
         .filter((e) => e.vehicleId === vehicleId)
-        .sort((a, b) => a.date - b.date);
+        .slice()
+        .sort((a, b) => a.odometer - b.odometer || a.date - b.date);
 
-    // computed[] is built incrementally so the backward anchor search can read
-    // anomaly flags of already-processed entries (required for FIX B).
     const computed: ComputedFuelEntry[] = [];
-    const bounds = EFFICIENCY_BOUNDS[fuelType];
+
+    // Forward window accumulator.
+    let anchorOdo: number | null = null; // odometer of the last measurement anchor
+    let anchorLevel = 0;                  // tank level (L) just after that anchor
+    let carryFuel = 0;                    // banked partial-fill litres since the anchor
 
     for (let i = 0; i < vehicleEntries.length; i++) {
         const entry = vehicleEntries[i]!;
-        const prev = i > 0 ? vehicleEntries[i - 1] : undefined;
+        const prev = i > 0 ? vehicleEntries[i - 1]! : undefined;
 
-        // ── Distance ──────────────────────────────────────────────────────
         const rawDistance = prev ? entry.odometer - prev.odometer : 0;
         const distance = Math.max(0, rawDistance);
 
-        // ── Anomaly detection ─────────────────────────────────────────────
+        // ── Anomaly detection ──────────────────────────────────────────────
         const anomalies: AnomalyReason[] = [];
-
         if (prev) {
-            if (rawDistance < 0) {
-                anomalies.push('odometer_regression');
-            } else if (rawDistance === 0) {
-                anomalies.push('duplicate_odometer');
-            } else if (rawDistance > MAX_PLAUSIBLE_DISTANCE_KM) {
-                anomalies.push('excessive_distance');
-            }
+            if (rawDistance < 0) anomalies.push('odometer_regression');
+            else if (rawDistance === 0) anomalies.push('duplicate_odometer');
+            else if (rawDistance > MAX_PLAUSIBLE_DISTANCE_KM) anomalies.push('excessive_distance');
         }
-
         if (tankCapacity > 0 && entry.liters > tankCapacity * 1.05) {
-            // Allow 5% tolerance for pump rounding
-            anomalies.push('overfill');
+            anomalies.push('overfill'); // 5% tolerance for pump rounding
         }
 
-        // ── Efficiency ────────────────────────────────────────────────────
+        // ── Window economy (full-to-full, generalized to known tank levels) ──
+        // A fill is a measurement ANCHOR when we know the tank level just after it:
+        // a full fill (level = capacity) OR a partial fill with a recorded
+        // tankLevelAfter. Between two anchors the economy is EXACT, because the level
+        // drop plus the fuel added across the window equals the fuel burned. A full
+        // fill is just the special case level = capacity.
+        const hasLevel = entry.tankLevelAfter != null && tankCapacity > 0;
+        const isAnchor = !isEV && (entry.fullTank || hasLevel);
+        const levelAfter = entry.fullTank
+            ? tankCapacity
+            : hasLevel
+                ? Math.min(tankCapacity, Math.max(0, entry.tankLevelAfter! * tankCapacity))
+                : 0;
+
         let efficiency = 0;
         let isValid = false;
-        let isEstimated = false;
+        let windowDistance = 0;
+        let windowFuel = 0; // fuel BURNED across the window (the economy denominator)
+        let isFullTankClosing = false;
 
-        if (prev && distance > 0) {
-            if (entry.fullTank) {
-                // Strategy 1: Full-tank window method (+ FIX A + FIX B).
-                //
-                // Walk backward accumulating fuel until a clean full-tank anchor is found.
-                //
-                // FIX B: odometer_regression entries cannot serve as anchors -- their
-                // odometer reading is unreliable. However, the fuel they contain WAS
-                // physically consumed during the window, so their liters are ALWAYS added
-                // to litersSum regardless of their fullTank flag. The search continues past
-                // them toward an earlier, clean full-tank entry.
-                //
-                // FIX A: if the backward scan reaches entry[0] without finding any full-tank
-                // anchor (e.g. the user's first-ever log entry was a partial fill), we use
-                // entry[0] as a proxy anchor. The loop already accumulated its liters while
-                // scanning past it, so no double-addition is needed. The result is marked
-                // isEstimated=true because the initial tank state at entry[0] is unknown.
-                let litersSum = entry.liters;
-                let anchorIdx = -1;
-
-                for (let j = i - 1; j >= 0; j--) {
-                    const mid = vehicleEntries[j]!;
-
-                    // FIX B: regression entry -- count its fuel but skip it as an anchor.
-                    if (computed[j]!.anomalies.includes('odometer_regression')) {
-                        litersSum += mid.liters; // fuel was pumped regardless
-                        continue;               // keep searching for a clean anchor
-                    }
-
-                    if (mid.fullTank) {
-                        // Clean full-tank anchor found.
-                        anchorIdx = j;
-                        break;
-                    }
-
-                    // Partial fill between current and anchor -- accumulate fuel.
-                    litersSum += mid.liters;
-                }
-
-                // FIX A: determine effective anchor.
-                const useFirstAsAnchor = anchorIdx < 0 && i > 0;
-                const effectiveAnchorIdx = anchorIdx >= 0 ? anchorIdx : (i > 0 ? 0 : -1);
-
-                if (effectiveAnchorIdx >= 0) {
-                    const anchor = vehicleEntries[effectiveAnchorIdx]!;
-                    const windowDistance = entry.odometer - anchor.odometer;
-                    // Note: anchor's liters are already in litersSum from the loop scan
-                    // (added when the anchor was a non-full entry traversed by the loop).
-                    // For a true full-tank anchor the loop breaks before adding its liters,
-                    // which is correct -- its liters belong to the previous window.
-                    if (windowDistance > 0 && litersSum > 0) {
-                        efficiency = windowDistance / litersSum;
+        if (!isEV) {
+            if (isAnchor) {
+                if (anchorOdo !== null) {
+                    // burned = (level at last anchor − level now) + fuel added across the
+                    // window. For full→full this reduces to (banked partials + this fill).
+                    const addedInWindow = carryFuel + entry.liters;
+                    windowFuel = anchorLevel - levelAfter + addedInWindow;
+                    windowDistance = entry.odometer - anchorOdo;
+                    if (windowFuel > 0 && windowDistance > 0) {
+                        efficiency = windowDistance / windowFuel;
                         isValid = true;
-                        isEstimated = useFirstAsAnchor; // FIX A: no full-tank anchor = estimated
+                        isFullTankClosing = true;
+                        if (efficiency < bounds.min || efficiency > bounds.max) {
+                            anomalies.push('implausible_efficiency');
+                        }
                     }
                 }
+                // This anchor opens the next window; the fuel just added belonged to the
+                // window that just closed, so the next window starts empty.
+                anchorOdo = entry.odometer;
+                anchorLevel = levelAfter;
+                carryFuel = 0;
             } else {
-                // Strategy 2: Simple fill method (estimated).
-                // The distance driven since the last fill was fueled by the PREVIOUS
-                // entry's liters -- not the current fill being logged now.
-                // e.g. Entry A: 30L → Entry B (partial): distance A→B / A's 30L
-                if (prev && prev.liters > 0) {
-                    efficiency = distance / prev.liters;
-                    isValid = true;
-                    isEstimated = true;
-                }
-            }
-        }
-
-        // Plausibility check (skip EV -- bounds.max = 0).
-        if (isValid && bounds.max > 0) {
-            if (efficiency < bounds.min || efficiency > bounds.max) {
-                anomalies.push('implausible_efficiency');
-                // Flag but do not suppress -- the value is still shown.
+                // Partial fill with no known level: bank its fuel for the next anchor.
+                // (Fills before the first anchor are pre-baseline and get discarded when
+                // that first anchor resets the accumulator — they can't be measured.)
+                carryFuel += entry.liters;
             }
         }
 
@@ -238,8 +198,11 @@ export function computeEntries(
             distanceDriven: distance,
             efficiency,
             isEfficiencyValid: isValid,
-            isEfficiencyEstimated: isEstimated,
+            isEfficiencyEstimated: false,
             anomalies,
+            windowDistance,
+            windowFuel,
+            isFullTankClosing,
         });
     }
 
@@ -250,10 +213,7 @@ export function computeEntries(
 // Linear regression helper
 // ---------------------------------------------------------------------------
 
-/**
- * Least-squares slope of y over equally-spaced x (index 0, 1, 2, ...).
- * Returns 0 when fewer than 2 points.
- */
+/** Least-squares slope of y over equally-spaced x (0,1,2,…). 0 for < 2 points. */
 function linearSlope(values: number[]): number {
     const n = values.length;
     if (n < 2) return 0;
@@ -273,17 +233,14 @@ function linearSlope(values: number[]): number {
 // Stats computation
 // ---------------------------------------------------------------------------
 
+const isAnomalousDistance = (e: ComputedFuelEntry): boolean =>
+    e.anomalies.includes('odometer_regression') ||
+    e.anomalies.includes('duplicate_odometer') ||
+    e.anomalies.includes('excessive_distance');
+
 /**
- * Vehicle-level aggregate statistics.
- *
- * Uses arithmetic mean of per-entry efficiency values (not totalDistance/totalFuel)
- * for the same reason Fuelly, Spritmonitor, and fueleconomy.gov do: the first fill
- * is a baseline whose fuel is not paired with a measured distance, so including it
- * in a weighted ratio distorts the average by 20-40%.
- *
- * FIX C applied: costPerKm only counts entries with distanceDriven > 0 and no
- * odometer anomaly, preventing regression/duplicate fills from inflating the cost
- * numerator without contributing to the distance denominator.
+ * Vehicle-level aggregate statistics, all derived from measured full-to-full
+ * windows (efficiency) and clean distance contributions (distance/cost).
  */
 export function computeStats(
     entries: readonly FuelEntry[],
@@ -291,75 +248,80 @@ export function computeStats(
     tankCapacity = 0,
     fuelType: FuelType = 'petrol',
 ): EfficiencyStat {
-    const computed = computeEntries(entries, vehicleId, tankCapacity, fuelType);
-
-    // All entries with a valid (non-anomalous odometer) distance contribution.
-    const withDistance = computed.filter((e) =>
-        !e.anomalies.includes('odometer_regression') &&
-        !e.anomalies.includes('duplicate_odometer'),
+    return computeStatsFromEntries(
+        computeEntries(entries, vehicleId, tankCapacity, fuelType),
+        vehicleId,
+        fuelType,
     );
+}
 
-    const totalDistance = withDistance.reduce((s, e) => s + e.distanceDriven, 0);
+/**
+ * Aggregate stats from already-computed entries. Lets a caller run computeEntries
+ * once and derive both the enriched list and the stats from it, avoiding a second
+ * full O(n) pass (perf win for per-vehicle cards on low-end devices).
+ */
+export function computeStatsFromEntries(
+    computed: ComputedFuelEntry[],
+    vehicleId: string,
+    fuelType: FuelType = 'petrol',
+): EfficiencyStat {
+
+    // ── Distance & cost (clean contributions only) ─────────────────────────
+    const cleanDistance = computed.filter((e) => e.distanceDriven > 0 && !isAnomalousDistance(e));
+    const totalDistance = cleanDistance.reduce((s, e) => s + e.distanceDriven, 0);
     const totalFuel = computed.reduce((s, e) => s + e.liters, 0);
     const totalCost = computed.reduce((s, e) => s + e.totalCost, 0);
 
-    // FIX C: only entries that contributed a reliable, non-zero distance are eligible
-    // for the cost-per-km calculation. The old computed.slice(1) included regression
-    // entries (distanceDriven=0) whose cost inflated the numerator without contributing
-    // to the denominator, overstating costPerKm by up to 90%.
-    const costableEntries = computed.filter((e) =>
-        e.distanceDriven > 0 &&
-        !e.anomalies.includes('odometer_regression') &&
-        !e.anomalies.includes('duplicate_odometer'),
+    const costableAmount = cleanDistance.reduce((s, e) => s + e.totalCost, 0);
+    const costPerKm = totalDistance > 0 ? costableAmount / totalDistance : 0;
+
+    // ── Measured efficiency windows (the only trustworthy economy set) ──────
+    const measured = computed.filter((e) =>
+        e.isFullTankClosing &&
+        e.isEfficiencyValid &&
+        e.windowFuel > 0 &&
+        e.windowDistance > 0 &&
+        !e.anomalies.includes('excessive_distance') &&
+        !e.anomalies.includes('implausible_efficiency') &&
+        !e.anomalies.includes('overfill'),
     );
-    const costableDistance = costableEntries.reduce((s, e) => s + e.distanceDriven, 0);
-    const costableAmount = costableEntries.reduce((s, e) => s + e.totalCost, 0);
-    const costPerKm = costableDistance > 0 ? costableAmount / costableDistance : 0;
 
-    // ── Efficiency sets ──────────────────────────────────────────────────
-    const allValid = computed.filter((e) => e.isEfficiencyValid && e.efficiency > 0);
-    const accurateValid = allValid.filter((e) => !e.isEfficiencyEstimated);
+    // Distance-weighted average — Σ window distance / Σ window fuel.
+    const sumWD = measured.reduce((s, e) => s + e.windowDistance, 0);
+    const sumWF = measured.reduce((s, e) => s + e.windowFuel, 0);
+    const averageEfficiency = sumWF > 0 ? sumWD / sumWF : 0;
 
-    const avgEfficiency = allValid.length
-        ? allValid.reduce((s, e) => s + e.efficiency, 0) / allValid.length
-        : 0;
+    const effs = measured.map((e) => e.efficiency);
+    const best = effs.length ? Math.max(...effs) : 0;
+    const worst = effs.length ? Math.min(...effs) : 0;
 
-    const accurateAvg = accurateValid.length
-        ? accurateValid.reduce((s, e) => s + e.efficiency, 0) / accurateValid.length
-        : 0;
+    // Recent: last up-to-5 measured windows, distance-weighted.
+    const recent = measured.slice(-5);
+    const recentWD = recent.reduce((s, e) => s + e.windowDistance, 0);
+    const recentWF = recent.reduce((s, e) => s + e.windowFuel, 0);
+    const recentAvg = recentWF > 0 ? recentWD / recentWF : 0;
 
-    const best = allValid.length ? Math.max(...allValid.map((e) => e.efficiency)) : 0;
-    const worst = allValid.length ? Math.min(...allValid.map((e) => e.efficiency)) : 0;
-    const accBest = accurateValid.length ? Math.max(...accurateValid.map((e) => e.efficiency)) : 0;
-    const accWorst = accurateValid.length ? Math.min(...accurateValid.map((e) => e.efficiency)) : 0;
-
-    // ── Rolling average (last 5 computable fills) ────────────────────────
-    const recentValid = allValid.slice(-5);
-    const recentAvg = recentValid.length
-        ? recentValid.reduce((s, e) => s + e.efficiency, 0) / recentValid.length
-        : 0;
-
-    // ── Efficiency trend (linear regression over valid efficiencies) ──────
-    const trendSlope = linearSlope(allValid.map((e) => e.efficiency));
+    // Trend over measured window economies (odometer order), relative stable band.
+    const trendSlope = linearSlope(effs);
+    const stableBand = Math.max(0.05, averageEfficiency * 0.01);
     const efficiencyTrend: EfficiencyStat['efficiencyTrend'] =
-        trendSlope > 0.05 ? 'improving' :
-            trendSlope < -0.05 ? 'declining' :
+        trendSlope > stableBand ? 'improving' :
+            trendSlope < -stableBand ? 'declining' :
                 'stable';
 
-    // ── CO2 estimate ──────────────────────────────────────────────────────
-    const co2Factor = CO2_KG_PER_LITER[fuelType];
-    const estimatedCO2kg = +(totalFuel * co2Factor).toFixed(2);
+    // ── CO2 ────────────────────────────────────────────────────────────────
+    const estimatedCO2kg = +(totalFuel * CO2_KG_PER_LITER[fuelType]).toFixed(2);
 
-    // ── Refuel intervals ─────────────────────────────────────────────────
+    // ── Refuel intervals (clean + bounded) ─────────────────────────────────
     const MS_PER_DAY = 86400000;
-    const intervals = computed.slice(1).map((e, i) => {
-        const prev = computed[i]!; // slice(1) shifts by 1 so i aligns to computed[i]
-        return {
+    const intervals = computed
+        .slice(1)
+        .map((e, i) => ({
             km: e.distanceDriven,
-            days: (e.date - prev.date) / MS_PER_DAY,
-        };
-    }).filter((iv) => iv.km > 0 && iv.days >= 0);
-
+            days: (e.date - computed[i]!.date) / MS_PER_DAY,
+            anomalous: isAnomalousDistance(e),
+        }))
+        .filter((iv) => !iv.anomalous && iv.km > 0 && iv.days >= 0 && iv.days <= MAX_PLAUSIBLE_INTERVAL_DAYS);
     const avgKmBetweenFills =
         intervals.length ? intervals.reduce((s, iv) => s + iv.km, 0) / intervals.length : 0;
     const avgDaysBetweenFills =
@@ -367,12 +329,13 @@ export function computeStats(
 
     return {
         vehicleId,
-        averageEfficiency: avgEfficiency,
+        averageEfficiency,
         bestEfficiency: best,
         worstEfficiency: worst,
-        accurateAverageEfficiency: accurateAvg,
-        accurateBestEfficiency: accBest,
-        accurateWorstEfficiency: accWorst,
+        // v3: every counted window is a clean measurement, so the "accurate" set equals the main set.
+        accurateAverageEfficiency: averageEfficiency,
+        accurateBestEfficiency: best,
+        accurateWorstEfficiency: worst,
         recentAverageEfficiency: recentAvg,
         efficiencyTrend,
         efficiencyTrendSlope: +trendSlope.toFixed(4),
@@ -384,62 +347,151 @@ export function computeStats(
         avgKmBetweenFills: +avgKmBetweenFills.toFixed(1),
         avgDaysBetweenFills: +avgDaysBetweenFills.toFixed(1),
         entryCount: computed.length,
-        computableEntryCount: allValid.length,
+        computableEntryCount: measured.length,
     };
 }
 
 // ---------------------------------------------------------------------------
-// Efficiency classification
+// Efficiency classification (per-fill badge vs the vehicle's own baseline)
 // ---------------------------------------------------------------------------
 
+export type EfficiencyLabel = 'excellent' | 'good' | 'average' | 'poor';
+
 /**
- * SD-based efficiency classification.
- *
- * Rather than fixed +/-% thresholds, we use the vehicle's own standard
- * deviation so the score is meaningful regardless of vehicle type.
- * Without enough data we fall back to a simple percentage delta.
- *
- * Returns a 0-100 score and a label for UI rendering.
+ * Score one window economy against the vehicle's own distribution. Uses a z-score
+ * once there are enough samples (so the bands adapt to the vehicle), falling back
+ * to a percentage delta for sparse data. Bands are contiguous and non-overlapping.
  */
 export function classifyEfficiency(
     efficiency: number,
-    allValidEfficiencies: number[],
-): { score: number; delta: number; label: 'excellent' | 'good' | 'average' | 'poor' } {
-    if (efficiency === 0 || allValidEfficiencies.length === 0) {
+    measuredEfficiencies: number[],
+): { score: number; delta: number; label: EfficiencyLabel } {
+    if (efficiency <= 0 || measuredEfficiencies.length === 0) {
         return { score: 50, delta: 0, label: 'average' };
     }
 
-    const avg = allValidEfficiencies.reduce((s, v) => s + v, 0) / allValidEfficiencies.length;
-    if (avg === 0) return { score: 50, delta: 0, label: 'average' };
+    const avg = measuredEfficiencies.reduce((s, v) => s + v, 0) / measuredEfficiencies.length;
+    if (avg <= 0) return { score: 50, delta: 0, label: 'average' };
 
     const deltaPercent = ((efficiency - avg) / avg) * 100;
 
-    if (allValidEfficiencies.length >= 4) {
-        // SD-based classification
+    if (measuredEfficiencies.length >= 4) {
         const variance =
-            allValidEfficiencies.reduce((s, v) => s + (v - avg) ** 2, 0) /
-            allValidEfficiencies.length;
+            measuredEfficiencies.reduce((s, v) => s + (v - avg) ** 2, 0) / measuredEfficiencies.length;
         const sd = Math.sqrt(variance);
-
-        if (sd !== 0) {
-            const zScore = (efficiency - avg) / sd;
-            const score = Math.max(0, Math.min(100, 50 + zScore * 20));
-            const label: 'excellent' | 'good' | 'average' | 'poor' =
-                zScore > 1.0 ? 'excellent' :
-                    zScore > 0.3 ? 'good' :
-                        zScore > -0.7 ? 'average' :
-                            'poor';
+        if (sd > 0) {
+            const z = (efficiency - avg) / sd;
+            const score = Math.max(0, Math.min(100, 50 + z * 20));
+            const label: EfficiencyLabel =
+                z >= 1.0 ? 'excellent' : z >= 0.3 ? 'good' : z >= -0.7 ? 'average' : 'poor';
             return { score: +score.toFixed(1), delta: +deltaPercent.toFixed(1), label };
         }
-        // sd === 0: all entries identical -- fall through to percent-based
     }
 
-    // Fallback: percentage delta
+    // Sparse-data fallback: contiguous percentage bands (no gaps/overlap).
     const score = Math.max(0, Math.min(100, 50 + deltaPercent * 2));
-    const label: 'excellent' | 'good' | 'average' | 'poor' =
-        deltaPercent > 8 ? 'excellent' :
-            deltaPercent > 2 ? 'good' :
-                deltaPercent > -5 ? 'average' :
-                    'poor';
+    const label: EfficiencyLabel =
+        deltaPercent >= 8 ? 'excellent' : deltaPercent >= 2 ? 'good' : deltaPercent >= -5 ? 'average' : 'poor';
     return { score: +score.toFixed(1), delta: +deltaPercent.toFixed(1), label };
+}
+
+// ---------------------------------------------------------------------------
+// Partial-tank economy ESTIMATE (fallback when no exact window exists)
+// ---------------------------------------------------------------------------
+
+export interface PartialTankEstimate {
+    vehicleId: string;
+    economyCentral: number; // km/L best estimate = distance / fuel-added-after-first
+    economyMin: number;     // km/L guaranteed lower bound (from tank capacity)
+    economyMax: number;     // km/L guaranteed upper bound
+    relHalfWidth: number;   // (max - min) / (2 * central); shrinks ~ 1/distance
+    confidence: number;     // 0..100, rises with distance + anchor fills, floors at bias
+    confidenceLabel: 'low' | 'moderate' | 'high';
+    spanDistance: number;   // km
+    spanFuel: number;       // L added after the first fill
+    fillCount: number;
+}
+
+const PARTIAL_MIN_DISTANCE_KM = 300;
+const PARTIAL_TOL_MAX = 0.5;          // ±50% relative uncertainty => confidence 0
+const PARTIAL_FILL_NOISE_REL = 0.01;  // ~1% per-fill pump/slosh/temperature noise
+const PARTIAL_BIAS_FLOOR = 0.02;      // irreducible systematic floor (odometer/meter bias)
+
+const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+
+/**
+ * Honest economy ESTIMATE for partial-only logs (no full fills and no recorded tank
+ * levels). From the fuel-balance identity burned = fuelAdded + (levelStart − levelEnd),
+ * with each unknown endpoint level bounded by [0, capacity], the economy is a provable
+ * interval whose relative width shrinks ~ 1/distance. The endpoint anchors are the
+ * span's OWN first and last fills (their post-fill level lies in [f, C]) — using an
+ * arbitrary large interior fill would break the guarantee.
+ *
+ * Returns null when an exact window already exists (the precise path owns the number),
+ * for EVs, without a tank capacity, or when the data is too thin to be meaningful.
+ */
+export function estimatePartialEconomy(
+    entries: readonly FuelEntry[],
+    vehicleId: string,
+    tankCapacity = 0,
+    fuelType: FuelType = 'petrol',
+): PartialTankEstimate | null {
+    if (fuelType === 'ev' || tankCapacity <= 0) return null;
+
+    const computed = computeEntries(entries, vehicleId, tankCapacity, fuelType);
+    if (computed.some((e) => e.isFullTankClosing && e.isEfficiencyValid)) return null;
+
+    const span = computed.filter((e) => !e.anomalies.includes('overfill'));
+    if (span.length < 2) return null;
+
+    const first = span[0]!;
+    const last = span[span.length - 1]!;
+    const C = tankCapacity;
+
+    // End-to-end distance (not a sum of per-leg distances over a filtered array),
+    // minus any anomalous-distance legs inside the span.
+    let distance = Math.max(0, last.odometer - first.odometer);
+    for (let i = 1; i < span.length; i++) {
+        if (isAnomalousDistance(span[i]!)) distance -= span[i]!.distanceDriven;
+    }
+    if (distance < PARTIAL_MIN_DISTANCE_KM) return null;
+
+    // Fuel added back after the first fill (the first fill is the opening residual marker).
+    let fuelAfterFirst = 0;
+    for (let i = 1; i < span.length; i++) fuelAfterFirst += span[i]!.liters;
+    if (fuelAfterFirst <= 1e-6) return null;
+
+    // Endpoint anchors: the first/last fills' own volumes bound the endpoint levels.
+    const fStart = first.liters;
+    const fEnd = last.liters;
+    const EPS = 1e-6;
+    const burnedLo = Math.max(EPS, fuelAfterFirst + fStart - C); // best case (fewest litres burned)
+    const burnedHi = fuelAfterFirst + C - fEnd;                  // worst case (most burned)
+
+    const economyCentral = distance / fuelAfterFirst;
+    const economyMax = distance / burnedLo; // raw guaranteed bound (not clamped to plausibility)
+    const economyMin = distance / burnedHi;
+
+    const fillsAfterFirst = span.length - 1;
+    const sigmaEndpoint = Math.sqrt(((C - fStart) ** 2 + (C - fEnd) ** 2) / 12);
+    const sigmaRel = Math.sqrt(
+        (sigmaEndpoint / fuelAfterFirst) ** 2 +              // endpoint/capacity term ~ 1/F
+        PARTIAL_FILL_NOISE_REL ** 2 / Math.max(1, fillsAfterFirst) + // per-fill noise ~ 1/√N
+        PARTIAL_BIAS_FLOOR ** 2,                            // systematic floor
+    );
+    const confidence = Math.round(100 * clamp01(1 - sigmaRel / PARTIAL_TOL_MAX));
+    const confidenceLabel = confidence >= 80 ? 'high' : confidence >= 50 ? 'moderate' : 'low';
+
+    return {
+        vehicleId,
+        economyCentral: +economyCentral.toFixed(2),
+        economyMin: +economyMin.toFixed(2),
+        economyMax: +economyMax.toFixed(2),
+        relHalfWidth: +((economyMax - economyMin) / (2 * economyCentral)).toFixed(3),
+        confidence,
+        confidenceLabel,
+        spanDistance: Math.round(distance),
+        spanFuel: +fuelAfterFirst.toFixed(2),
+        fillCount: fillsAfterFirst,
+    };
 }
