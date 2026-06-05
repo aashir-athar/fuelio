@@ -55,6 +55,7 @@
         {
           "locationWhenInUsePermission": "Fuelio uses your location only to detect when you stop at a fuel station, so it can offer to log your fill-up. Optional and off by default.",
           "locationAlwaysAndWhenInUsePermission": "Fuelio checks for nearby fuel stations in the background only to offer a fuel-log prompt. Optional, off by default, and you can turn it off anytime in Settings.",
+          "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

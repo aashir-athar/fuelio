@@ -145,6 +145,9 @@ export default function SettingsModal() {
                     text: 'Wipe everything',
                     style: 'destructive',
                     onPress: () => {
+                        // Stop the opt-in background station watch before resetting the
+                        // flag, so it can't keep running after a wipe.
+                        void disableStationDetection();
                         resetVehicles();
                         resetFuel();
                         resetServices();
