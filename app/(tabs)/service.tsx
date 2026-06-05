@@ -1,10 +1,10 @@
-// Lever: loss aversion + progressive disclosure. Overdue/soon reminders sit above
-// the fold as a gentle nudge ("don't let this lapse"), while the full service log
-// stays collapsed into one calm card so the screen reads as "handled, not nagging".
+// Lever: loss aversion + progressive disclosure. The most urgent reminder is lifted
+// into a bold lime statement card ("don't let this lapse"), softer reminders sit
+// below as calm charcoal cards, and the full history collapses into one floating
+// card so the screen reads as "handled, not nagging".
 import { ServiceReminderCard } from '@/src/components/cards/ServiceReminderCard';
 import { Card } from '@/src/components/primitives/Card';
 import { EmptyState } from '@/src/components/primitives/EmptyState';
-import { SectionHeader } from '@/src/components/primitives/SectionHeader';
 import { SegmentedControl } from '@/src/components/primitives/SegmentedControl';
 import { Text } from '@/src/components/primitives/Text';
 import { AddServiceSheet } from '@/src/components/sheets/AddServiceSheet';
@@ -15,8 +15,8 @@ import { useServiceReminders } from '@/src/hooks/useServiceReminders';
 import { useServiceStore } from '@/src/store/service.store';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { accentGlow, radius, space } from '@/src/theme/tokens';
-import type { ServiceEntry } from '@/src/types';
+import { accentGlow, fontFamily, radius, space } from '@/src/theme/tokens';
+import type { DistanceUnit, ServiceEntry } from '@/src/types';
 import { formatCurrency, formatDate, formatDistance } from '@/src/utils/format';
 import { serviceTypeLabel } from '@/src/utils/serviceLabels';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +27,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Tab = 'oil' | 'all';
+type ThemeColors = ReturnType<typeof useTheme>['colors'];
 
 interface ServiceRowProps {
   entry: ServiceEntry;
@@ -50,33 +51,33 @@ const ServiceRow = React.memo(function ServiceRow({ entry, onPress }: ServiceRow
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: space[3],
-        paddingHorizontal: space[4],
-        gap: space[3],
+        paddingVertical: space[4],
+        paddingHorizontal: space[5],
+        gap: space[4],
         opacity: pressed ? 0.7 : 1,
       })}
     >
       <View
         style={{
-          width: 44,
-          height: 44,
+          width: 48,
+          height: 48,
           borderRadius: radius.md,
           backgroundColor: colors.accentSoft,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Ionicons name="build" size={18} color={colors.accent} />
+        <Ionicons name="build" size={20} color={colors.accent} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text variant="body" weight="semibold" numberOfLines={1}>{label}</Text>
+        <Text variant="bodyLg" weight="semibold" numberOfLines={1}>{label}</Text>
         <Text variant="caption" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
           {formatDate(entry.date, 'long')} · {formatDistance(entry.odometer, distanceUnit)}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-        <Text variant="body" weight="semibold">{formatCurrency(entry.cost, currency)}</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        <Text variant="bodyLg" weight="semibold">{formatCurrency(entry.cost, currency)}</Text>
+        <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />
       </View>
     </Pressable>
   );
@@ -110,45 +111,69 @@ export default function ServiceScreen() {
     [services, vehicle, tab],
   );
 
+  const distanceUnit = useSettingsStore((s) => s.distanceUnit);
+
   if (!vehicle) return null;
 
-  const upcoming = reminders.slice(0, 3);
+  // The single most pressing reminder gets the lime statement card; the rest stay calm.
+  const lead = reminders[0];
+  const rest = reminders.slice(1, 3);
 
   const enter = (delay: number) =>
-    reduceMotion ? undefined : FadeInDown.duration(320).delay(delay);
+    reduceMotion ? undefined : FadeInDown.duration(360).delay(delay);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + space[3],
+          paddingTop: insets.top + space[4],
           paddingBottom: insets.bottom + 120,
           paddingHorizontal: space[5],
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Text variant="label" tone="secondary">MAINTENANCE</Text>
-        <Text variant="title" style={{ marginTop: space[1], marginBottom: space[5] }}>
-          Keep it running
-        </Text>
+        <Animated.View entering={enter(0)}>
+          <Text variant="micro" tone="secondary">MAINTENANCE</Text>
+          <Text
+            style={{
+              fontFamily: fontFamily.display,
+              fontSize: 44,
+              lineHeight: 48,
+              letterSpacing: -1.4,
+              color: colors.textPrimary,
+              marginTop: space[1],
+              marginBottom: space[5],
+            }}
+          >
+            Keep it running
+          </Text>
+        </Animated.View>
 
-        <SegmentedControl
-          options={[
-            { value: 'all', label: 'All Services' },
-            { value: 'oil', label: 'Oil Changes' },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
+        <Animated.View entering={enter(60)}>
+          <SegmentedControl
+            options={[
+              { value: 'all', label: 'All Services' },
+              { value: 'oil', label: 'Oil Changes' },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        </Animated.View>
 
-        {upcoming.length > 0 ? (
-          <>
-            <SectionHeader title="Upcoming" />
-            {upcoming.map((r, i) => (
+        {lead ? (
+          <Animated.View entering={enter(120)} style={{ marginTop: space[6] }}>
+            <Text variant="label" tone="secondary" style={{ marginBottom: space[3] }}>UPCOMING</Text>
+            <LeadReminderCard
+              title={serviceTypeLabel(lead.type)}
+              remaining={lead.remaining}
+              distanceUnit={distanceUnit}
+              colors={colors}
+            />
+            {rest.map((r, i) => (
               <Animated.View
                 key={r.type}
-                entering={enter(i * 60)}
-                style={{ marginBottom: space[3] }}
+                entering={enter(180 + i * 60)}
+                style={{ marginTop: space[3] }}
               >
                 <ServiceReminderCard
                   title={serviceTypeLabel(r.type)}
@@ -157,10 +182,10 @@ export default function ServiceScreen() {
                 />
               </Animated.View>
             ))}
-          </>
+          </Animated.View>
         ) : null}
 
-        <SectionHeader title="History" />
+        <Text variant="label" tone="secondary" style={{ marginTop: space[7], marginBottom: space[3] }}>HISTORY</Text>
         {vServices.length === 0 ? (
           <EmptyState
             image={IMAGES.carMaintenance}
@@ -170,13 +195,13 @@ export default function ServiceScreen() {
             onCta={openSheet}
           />
         ) : (
-          <Animated.View entering={enter(80)}>
-            <Card padded={false} style={{ overflow: 'hidden' }}>
+          <Animated.View entering={enter(120)}>
+            <Card tone="elevated" padded={false} style={{ overflow: 'hidden' }}>
               {vServices.map((s, i) => (
                 <View key={s.id}>
                   <ServiceRow entry={s} onPress={openEntry} />
                   {i < vServices.length - 1 ? (
-                    <View style={{ height: 1, backgroundColor: colors.divider, marginHorizontal: space[4] }} />
+                    <View style={{ height: 1, backgroundColor: colors.divider, marginHorizontal: space[5] }} />
                   ) : null}
                 </View>
               ))}
@@ -219,3 +244,97 @@ export default function ServiceScreen() {
     </View>
   );
 }
+
+interface LeadReminderCardProps {
+  title: string;
+  remaining: number;
+  distanceUnit: DistanceUnit;
+  colors: ThemeColors;
+}
+
+// The hero reminder: full-lime fill with black text when overdue (loudest signal),
+// charcoal with a lime accent number when simply due soon.
+const LeadReminderCard = React.memo(function LeadReminderCard({
+  title, remaining, distanceUnit, colors,
+}: LeadReminderCardProps) {
+  const overdue = remaining < 0;
+  const distance = formatDistance(Math.abs(remaining), distanceUnit);
+
+  if (overdue) {
+    return (
+      <Card tone="lime" style={[{ overflow: 'hidden' }, accentGlow(colors.accent)]}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Text variant="micro" tone="onAccent" style={{ opacity: 0.65 }}>NEXT SERVICE</Text>
+          <View
+            style={{
+              paddingHorizontal: space[3],
+              paddingVertical: 5,
+              borderRadius: radius.pill,
+              backgroundColor: colors.textOnAccent,
+            }}
+          >
+            <Text variant="micro" weight="bold" tone="accent">OVERDUE</Text>
+          </View>
+        </View>
+        <Text variant="title" tone="onAccent" numberOfLines={1} style={{ marginTop: space[3] }}>
+          {title}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2], marginTop: space[2] }}>
+          <Text
+            style={{
+              fontFamily: fontFamily.display,
+              fontSize: 40,
+              lineHeight: 42,
+              letterSpacing: -1.4,
+              color: colors.textOnAccent,
+            }}
+          >
+            {distance}
+          </Text>
+          <Text variant="body" tone="onAccent" weight="semibold" style={{ marginBottom: space[2], opacity: 0.8 }}>
+            past due
+          </Text>
+        </View>
+      </Card>
+    );
+  }
+
+  return (
+    <Card tone="elevated" style={{ overflow: 'hidden' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Text variant="micro" tone="secondary">NEXT SERVICE</Text>
+        <View
+          style={{
+            paddingHorizontal: space[3],
+            paddingVertical: 5,
+            borderRadius: radius.pill,
+            borderWidth: 1,
+            borderColor: colors.accent,
+            backgroundColor: colors.accentSoft,
+          }}
+        >
+          <Text variant="micro" weight="bold" tone="accent">SOON</Text>
+        </View>
+      </View>
+      <Text variant="title" numberOfLines={1} style={{ marginTop: space[3] }}>
+        {title}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2], marginTop: space[2] }}>
+        <Text
+          style={{
+            fontFamily: fontFamily.display,
+            fontSize: 40,
+            lineHeight: 42,
+            letterSpacing: -1.4,
+            color: colors.accent,
+          }}
+        >
+          {distance}
+        </Text>
+        <Text variant="body" tone="secondary" weight="semibold" style={{ marginBottom: space[2] }}>
+          to go
+        </Text>
+      </View>
+    </Card>
+  );
+});

@@ -1,6 +1,9 @@
 import '@/src/services/locationTask'; // registers the background station-watch task (must load at startup)
 import { AnimatedSplash } from '@/src/components/AnimatedSplash';
 import { useServiceNotifications } from '@/src/hooks/useServiceNotifications';
+import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
+import { Manjari_400Regular, Manjari_700Bold } from '@expo-google-fonts/manjari';
+import { useFonts } from 'expo-font';
 import { resumeStationDetection } from '@/src/services/location';
 import { configureNotificationHandler } from '@/src/services/notifications';
 import { useStoreHydration } from '@/src/store/hydration';
@@ -22,6 +25,15 @@ configureNotificationHandler();
 function RootNav() {
   const { colors, isDark } = useTheme();
   const hydrated = useStoreHydration();
+  const [fontsLoaded] = useFonts({
+    Manjari_400Regular,
+    Manjari_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+  const ready = hydrated && fontsLoaded;
   const router = useRouter();
   const segments = useSegments();
   const hasOnboarded = useSettingsStore((s) => s.hasCompletedOnboarding);
@@ -39,9 +51,9 @@ function RootNav() {
   }, [hydrated, locationEnabled]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!ready) return;
     SplashScreen.hideAsync().catch(() => {});
-  }, [hydrated]);
+  }, [ready]);
 
   // Route the user when they tap a notification (foreground + cold-start).
   useEffect(() => {
@@ -75,7 +87,7 @@ function RootNav() {
     }
   }, [hydrated, hasOnboarded, vehicleCount, segments, router]);
 
-  if (!hydrated) return null;
+  if (!ready) return null;
 
   return (
     <>

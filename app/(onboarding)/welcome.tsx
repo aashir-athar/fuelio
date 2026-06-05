@@ -1,17 +1,18 @@
-// Lever: goal-gradient + progress framing — a visible step counter and animated
-// progress bar make the four-slide journey feel short and almost finished, lifting
-// completion-to-first-vehicle conversion.
-import { Avatar } from '@/src/components/primitives/Avatar';
+// Lever: goal-gradient + progress framing — a visible step counter, dot rail, and an
+// animated lime progress bar make the four-slide journey feel short and almost finished,
+// lifting completion-to-first-vehicle conversion.
 import { Button } from '@/src/components/primitives/Button';
+import { Card } from '@/src/components/primitives/Card';
 import { Text } from '@/src/components/primitives/Text';
 import { IMAGES } from '@/src/constants/images';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { accentGlow, duration, radius, space, spring } from '@/src/theme/tokens';
+import { accentGlow, duration, fontFamily, radius, space, spring } from '@/src/theme/tokens';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Dimensions, ScrollView, View } from 'react-native';
+import { Dimensions, Pressable, View } from 'react-native';
 import Animated, {
     Easing,
     FadeIn,
@@ -26,28 +27,31 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const SLIDES = [
     {
         image: IMAGES.onboarding,
-        title: 'Welcome to Fuelio',
-        body: 'Every fill-up and service in one calm place. Your data stays on your phone.',
+        tag: 'PRIVATE BY DEFAULT',
+        title: 'Your garage,\nin your pocket',
+        body: 'Every fill-up and service in one calm place. Your data never leaves your phone.',
     },
     {
         image: IMAGES.fueling,
-        title: 'Log a fill in five seconds',
-        body: 'Volume, price, odometer. Fuelio does the rest with a fleet-grade economy algorithm.',
+        tag: 'FIVE SECOND LOG',
+        title: 'Log a fill\nin one breath',
+        body: 'Volume, price, odometer. Fuelio runs a fleet-grade economy algorithm on the rest.',
     },
     {
         image: IMAGES.oilChange,
-        title: 'Never miss an oil change',
-        body: 'Reminders that reach you on time, so small jobs never turn into big bills.',
+        tag: 'NEVER FORGET',
+        title: 'Catch service\nbefore it bites',
+        body: 'Reminders that reach you on time, so a small job never grows into a big bill.',
     },
     {
         image: IMAGES.analysis,
-        title: 'See your real numbers',
-        body: 'Economy, spend, and emissions across weeks and years. Know exactly where your money goes.',
+        tag: 'REAL NUMBERS',
+        title: 'See where\nyour money goes',
+        body: 'Economy, spend, and emissions across weeks and years. No guessing, ever.',
     },
 ] as const;
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const HERO_SIZE = Math.min(300, SCREEN_W - space[6] * 2 - space[10]);
 
 export default function WelcomeScreen() {
     const { colors } = useTheme();
@@ -59,7 +63,7 @@ export default function WelcomeScreen() {
 
     const isLast = index === SLIDES.length - 1;
     const progress = useSharedValue((index + 1) / SLIDES.length);
-    const haloScale = useSharedValue(1);
+    const heroScale = useSharedValue(1);
 
     useEffect(() => {
         const target = (index + 1) / SLIDES.length;
@@ -70,21 +74,21 @@ export default function WelcomeScreen() {
 
     useEffect(() => {
         if (reduceMotion) {
-            haloScale.value = 1;
+            heroScale.value = 1;
             return;
         }
-        // Re-trigger a gentle settle on the accent halo each time the slide changes,
-        // so the hero feels alive without a perpetual loop.
-        haloScale.value = 0.92;
-        haloScale.value = withSpring(1, spring.soft);
-    }, [index, haloScale, reduceMotion]);
+        // A gentle settle on the hero card each time the slide changes, so the screen
+        // feels alive without a perpetual loop.
+        heroScale.value = 0.97;
+        heroScale.value = withSpring(1, spring.soft);
+    }, [index, heroScale, reduceMotion]);
 
     const progressStyle = useAnimatedStyle(() => ({
         width: `${progress.value * 100}%`,
     }));
 
-    const haloStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: haloScale.value }],
+    const heroStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: heroScale.value }],
     }));
 
     const handleNext = useCallback(() => {
@@ -104,85 +108,109 @@ export default function WelcomeScreen() {
     const slide = SLIDES[index]!;
 
     return (
-        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + space[5] }}>
-            <View style={{ paddingHorizontal: space[6], gap: space[3] }}>
+        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + space[4] }}>
+            {/* Top rail: wordmark + divided step counter + lime progress bar */}
+            <View style={{ paddingHorizontal: space[6], gap: space[4] }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text variant="label" tone="muted" weight="semibold">
-                        {`STEP ${index + 1} OF ${SLIDES.length}`}
-                    </Text>
-                    <Text variant="label" tone="accent" weight="semibold">
-                        FUELIO
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
+                        <View
+                            style={[
+                                { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+                                accentGlow(colors.accent),
+                            ]}
+                        >
+                            <Text style={{ fontFamily: fontFamily.display, fontSize: 18, lineHeight: 22, color: colors.textOnAccent }}>F</Text>
+                        </View>
+                        <Text variant="label" weight="semibold">FUELIO</Text>
+                    </View>
+
+                    <View
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'baseline',
+                            paddingHorizontal: space[3],
+                            paddingVertical: space[1],
+                            borderRadius: radius.pill,
+                            backgroundColor: colors.surfaceElevated,
+                        }}
+                    >
+                        <Text variant="micro" tone="accent" weight="semibold">{`0${index + 1}`}</Text>
+                        <Text variant="micro" tone="muted" weight="semibold">{`  /  0${SLIDES.length}`}</Text>
+                    </View>
                 </View>
 
                 <View
                     accessible
                     accessibilityRole="progressbar"
                     accessibilityValue={{ min: 1, max: SLIDES.length, now: index + 1 }}
-                    style={{
-                        height: 6,
-                        borderRadius: radius.pill,
-                        backgroundColor: colors.surfaceElevated,
-                        overflow: 'hidden',
-                    }}
+                    style={{ height: 6, borderRadius: radius.pill, backgroundColor: colors.surfaceElevated, overflow: 'hidden' }}
                 >
                     <Animated.View
-                        style={[
-                            progressStyle,
-                            { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
-                        ]}
+                        style={[progressStyle, { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent }]}
                     />
                 </View>
             </View>
 
-            <ScrollView
-                key={index}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{
-                    flexGrow: 1,
-                    paddingHorizontal: space[6],
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                }}
-            >
+            {/* Stage */}
+            <View key={index} style={{ flex: 1, paddingHorizontal: space[6], justifyContent: 'center' }}>
+                {/* Lime hero — the star of the screen, with the existing image floating on it */}
                 <Animated.View
                     entering={reduceMotion ? undefined : FadeIn.duration(duration.slow)}
-                    style={{ alignItems: 'center', justifyContent: 'center' }}
+                    style={heroStyle}
                 >
-                    <Animated.View
-                        style={[
-                            haloStyle,
-                            {
-                                position: 'absolute',
-                                width: HERO_SIZE * 1.12,
-                                height: HERO_SIZE * 1.12,
-                                borderRadius: (HERO_SIZE * 1.12) / 2,
-                                backgroundColor: colors.accentSoft,
-                            },
-                            accentGlow(colors.accent),
-                        ]}
-                    />
-                    <Avatar source={slide.image} size={HERO_SIZE} tinted={false} />
+                    <Card tone="lime" style={[{ overflow: 'hidden', alignItems: 'center', paddingVertical: space[8] }, accentGlow(colors.accent)]}>
+                        <View
+                            style={{
+                                alignSelf: 'flex-start',
+                                paddingHorizontal: space[3],
+                                paddingVertical: 5,
+                                borderRadius: radius.pill,
+                                backgroundColor: colors.textOnAccent,
+                            }}
+                        >
+                            <Text variant="micro" tone="onAccent" weight="semibold" style={{ color: colors.accent }}>
+                                {slide.tag}
+                            </Text>
+                        </View>
+                        <Image
+                            source={slide.image}
+                            style={{ width: Math.min(240, SCREEN_W * 0.56), height: Math.min(240, SCREEN_W * 0.56), marginTop: space[4] }}
+                            contentFit="contain"
+                            transition={reduceMotion ? 0 : 220}
+                        />
+                    </Card>
                 </Animated.View>
 
+                {/* Big Manjari headline + supporting copy */}
                 <Animated.View
-                    entering={reduceMotion ? undefined : FadeInDown.delay(120).duration(duration.slow)}
-                    style={{ alignItems: 'center', marginTop: space[8] }}
+                    entering={reduceMotion ? undefined : FadeInDown.delay(90).duration(duration.slow)}
+                    style={{ marginTop: space[7] }}
                 >
-                    <Text variant="title" style={{ textAlign: 'center' }}>
+                    <Text variant="display" style={{ letterSpacing: -1.5 }}>
                         {slide.title}
                     </Text>
                     <Text
                         variant="bodyLg"
                         tone="secondary"
-                        style={{ textAlign: 'center', marginTop: space[3], maxWidth: SCREEN_W - space[10] - space[6] }}
+                        style={{ marginTop: space[4], maxWidth: SCREEN_W - space[6] * 2 }}
                     >
                         {slide.body}
                     </Text>
                 </Animated.View>
-            </ScrollView>
 
-            <View style={{ paddingHorizontal: space[6], paddingTop: space[4], paddingBottom: insets.bottom + space[5], gap: space[3] }}>
+                {/* Dot rail */}
+                <Animated.View
+                    entering={reduceMotion ? undefined : FadeInDown.delay(160).duration(duration.slow)}
+                    style={{ flexDirection: 'row', gap: space[2], marginTop: space[6] }}
+                >
+                    {SLIDES.map((_, i) => (
+                        <Dot key={i} active={i === index} accent={colors.accent} idle={colors.divider} />
+                    ))}
+                </Animated.View>
+            </View>
+
+            {/* Bottom action rail: bold lime pill + ghost skip */}
+            <View style={{ paddingHorizontal: space[6], paddingTop: space[4], paddingBottom: insets.bottom + space[5], gap: space[2] }}>
                 <Button
                     label={isLast ? 'Add my first vehicle' : 'Continue'}
                     onPress={handleNext}
@@ -191,15 +219,35 @@ export default function WelcomeScreen() {
                     accessibilityHint={isLast ? 'Continue to set up your vehicle' : 'Go to the next slide'}
                 />
                 {!isLast ? (
-                    <Button
-                        label="Skip"
+                    <Pressable
                         onPress={handleSkip}
-                        variant="ghost"
-                        fullWidth
+                        accessibilityRole="button"
+                        accessibilityLabel="Skip"
                         accessibilityHint="Skip the intro and set up your vehicle"
-                    />
-                ) : null}
+                        hitSlop={12}
+                        style={{ height: 44, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <Text variant="body" tone="muted" weight="semibold">Skip intro</Text>
+                    </Pressable>
+                ) : (
+                    <View style={{ height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text variant="caption" tone="muted">Takes about a minute. Worth every second.</Text>
+                    </View>
+                )}
             </View>
         </View>
     );
 }
+
+const Dot = React.memo(function Dot({ active, accent, idle }: { active: boolean; accent: string; idle: string }) {
+    return (
+        <View
+            style={{
+                width: active ? 26 : 8,
+                height: 8,
+                borderRadius: radius.pill,
+                backgroundColor: active ? accent : idle,
+            }}
+        />
+    );
+});

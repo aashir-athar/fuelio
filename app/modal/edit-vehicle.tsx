@@ -9,9 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditVehicleModal() {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const haptic = useHaptics();
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,9 +25,12 @@ export default function EditVehicleModal() {
 
     if (!vehicle) {
         return (
-            <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
-                <Text>Vehicle not found</Text>
-                <Button label="Close" onPress={() => router.back()} style={{ marginTop: space[4] }} />
+            <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: space[6] }}>
+                <Text variant="heading">Vehicle not found</Text>
+                <Text variant="caption" tone="muted" style={{ marginTop: space[2], textAlign: 'center' }}>
+                    It may have been deleted from your garage.
+                </Text>
+                <Button label="Close" onPress={() => router.back()} style={{ marginTop: space[5] }} />
             </View>
         );
     }
@@ -59,24 +64,34 @@ export default function EditVehicleModal() {
                 style={{
                     flexDirection: 'row',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     paddingHorizontal: space[5],
-                    paddingVertical: space[4],
+                    paddingTop: insets.top + space[3],
+                    paddingBottom: space[4],
                 }}
             >
-                <Text variant="heading">Edit vehicle</Text>
+                <View style={{ flex: 1, paddingRight: space[4] }}>
+                    <Text variant="micro" tone="secondary">EDIT VEHICLE</Text>
+                    <Text variant="title" numberOfLines={1} style={{ marginTop: space[1] }}>
+                        {vehicle.nickname}
+                    </Text>
+                </View>
                 <Pressable
                     onPress={() => router.back()}
-                    style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    hitSlop={8}
+                    style={({ pressed }) => ({
+                        width: 52,
+                        height: 52,
+                        borderRadius: 26,
                         backgroundColor: colors.surfaceElevated,
                         alignItems: 'center',
                         justifyContent: 'center',
-                    }}
+                        transform: [{ scale: pressed ? 0.94 : 1 }],
+                    })}
                 >
-                    <Ionicons name="close" size={22} color={colors.textPrimary} />
+                    <Ionicons name="close" size={24} color={colors.textPrimary} />
                 </Pressable>
             </View>
 

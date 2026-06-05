@@ -1,11 +1,15 @@
+// Lever: progressive disclosure + peak-end — the lime total card grows as the user
+// types, turning data entry into a live, satisfying payoff before they commit.
 import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useActiveVehicle } from '../../hooks/useActiveVehicle';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useFuelStore } from '../../store/fuel.store';
 import { useSettingsStore } from '../../store/settings.store';
 import { useTheme } from '../../theme/ThemeProvider';
-import { radius, space } from '../../theme/tokens';
+import { accentGlow, fontFamily, space } from '../../theme/tokens';
 import { formatCurrency } from '../../utils/format';
 import {
     displayToKm,
@@ -16,6 +20,7 @@ import {
     volumeUnitLabel,
 } from '../../utils/units';
 import { Button } from '../primitives/Button';
+import { Card } from '../primitives/Card';
 import { Chip } from '../primitives/Chip';
 import { Input } from '../primitives/Input';
 import { Sheet } from '../primitives/Sheet';
@@ -36,6 +41,7 @@ const TANK_LEVELS = [
 
 export function AddFuelSheet({ visible, onClose }: Props) {
     const { colors } = useTheme();
+    const reduceMotion = useReduceMotion();
     const vehicle = useActiveVehicle();
     const addEntry = useFuelStore((s) => s.addEntry);
     const currency = useSettingsStore((s) => s.currency);
@@ -90,62 +96,90 @@ export function AddFuelSheet({ visible, onClose }: Props) {
 
     if (!vehicle) return null;
 
+    const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(360).delay(delay));
+    const totalStr = formatCurrency(total, currency, 2);
+
     return (
         <Sheet visible={visible} onClose={onClose}>
             <ScrollView
-                contentContainerStyle={{ padding: space[5], gap: space[4] }}
+                contentContainerStyle={{ paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[6], gap: space[5] }}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
             >
-                <View>
-                    <Text variant="title">Log fuel</Text>
-                    <Text variant="caption" tone="secondary">{vehicle.nickname}</Text>
-                </View>
+                <Animated.View entering={enter(0)}>
+                    <Text variant="micro" tone="secondary">LOG A FILL-UP</Text>
+                    <Text variant="display" numberOfLines={1} style={{ marginTop: space[1] }}>New tank</Text>
+                    <Text variant="caption" tone="secondary" style={{ marginTop: space[1] }}>{vehicle.nickname}</Text>
+                </Animated.View>
 
-                <View style={{ flexDirection: 'row', gap: space[3] }}>
+                <Animated.View entering={enter(60)} style={{ gap: space[4] }}>
+                    <View style={{ flexDirection: 'row', gap: space[3] }}>
+                        <Input
+                            label={volumeUnit === 'gallon' ? 'Gallons' : 'Liters'}
+                            placeholder="0"
+                            keyboardType="decimal-pad"
+                            value={liters}
+                            onChangeText={setLiters}
+                            suffix={volumeUnitLabel(volumeUnit)}
+                            containerStyle={{ flex: 1 }}
+                        />
+                        <Input
+                            label={`Price / ${volumeUnitLabel(volumeUnit)}`}
+                            placeholder="0.00"
+                            keyboardType="decimal-pad"
+                            value={price}
+                            onChangeText={setPrice}
+                            suffix={currency}
+                            containerStyle={{ flex: 1 }}
+                        />
+                    </View>
+
                     <Input
-                        label={volumeUnit === 'gallon' ? 'Gallons' : 'Liters'}
+                        label="Odometer"
                         placeholder="0"
-                        keyboardType="decimal-pad"
-                        value={liters}
-                        onChangeText={setLiters}
-                        suffix={volumeUnitLabel(volumeUnit)}
-                        containerStyle={{ flex: 1 }}
+                        keyboardType="number-pad"
+                        value={odometer}
+                        onChangeText={setOdometer}
+                        suffix={distanceUnitLabel(distanceUnit)}
                     />
-                    <Input
-                        label={`Price / ${volumeUnitLabel(volumeUnit)}`}
-                        placeholder="0.00"
-                        keyboardType="decimal-pad"
-                        value={price}
-                        onChangeText={setPrice}
-                        suffix={currency}
-                        containerStyle={{ flex: 1 }}
-                    />
-                </View>
+                </Animated.View>
 
-                <Input
-                    label="Odometer"
-                    placeholder="0"
-                    keyboardType="number-pad"
-                    value={odometer}
-                    onChangeText={setOdometer}
-                    suffix={distanceUnitLabel(distanceUnit)}
-                />
+                {/* Live lime total — the hero of the sheet */}
+                <Animated.View entering={enter(120)}>
+                    <Card tone="lime" style={[{ overflow: 'hidden' }, accentGlow(colors.accent)]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <Text variant="micro" tone="onAccent" style={{ opacity: 0.65 }}>TOTAL THIS FILL</Text>
+                            {litersNum > 0 ? (
+                                <Text variant="micro" tone="onAccent" weight="semibold" style={{ opacity: 0.8 }}>
+                                    {liters || '0'} {volumeUnitLabel(volumeUnit)}
+                                </Text>
+                            ) : null}
+                        </View>
+                        <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            style={{ fontFamily: fontFamily.display, fontSize: 60, lineHeight: 64, letterSpacing: -1.6, color: colors.textOnAccent, marginTop: space[2] }}
+                        >
+                            {totalStr}
+                        </Text>
+                    </Card>
+                </Animated.View>
 
-                <View>
+                {/* Fill type — Full / Partial pills */}
+                <Animated.View entering={enter(180)} style={{ gap: space[3] }}>
+                    <Text variant="label" tone="secondary">FILL TYPE</Text>
                     <View style={{ flexDirection: 'row', gap: space[2] }}>
                         <Chip label="Full tank" selected={fullTank} onPress={() => setFullTank(true)} />
                         <Chip label="Partial fill" selected={!fullTank} onPress={() => setFullTank(false)} />
                     </View>
-                    <Text variant="caption" tone="muted" style={{ marginTop: space[2] }}>
+                    <Text variant="caption" tone="muted">
                         {fullTank
-                            ? 'Filled to the top — this is what measures your real economy.'
+                            ? 'Filled to the top. This is what measures your real economy.'
                             : 'Set the tank level after filling for an exact reading, or leave it and it rolls into your next full tank.'}
                     </Text>
                     {fullTank ? null : (
-                        <View style={{ marginTop: space[3] }}>
-                            <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
-                                TANK LEVEL NOW (OPTIONAL)
-                            </Text>
+                        <View style={{ gap: space[3], marginTop: space[1] }}>
+                            <Text variant="label" tone="secondary">TANK LEVEL NOW (OPTIONAL)</Text>
                             <View style={{ flexDirection: 'row', gap: space[2] }}>
                                 {TANK_LEVELS.map((l) => (
                                     <Chip
@@ -153,43 +187,33 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                                         label={l.label}
                                         selected={tankLevel === l.value}
                                         onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
+                                        style={{ flex: 1, alignItems: 'center' }}
                                     />
                                 ))}
                             </View>
                         </View>
                     )}
-                </View>
+                </Animated.View>
 
-                <Input
-                    label="Notes (optional)"
-                    placeholder="Station, route, anything worth remembering"
-                    value={notes}
-                    onChangeText={setNotes}
-                    multiline
-                />
+                <Animated.View entering={enter(240)}>
+                    <Input
+                        label="Notes (optional)"
+                        placeholder="Station, route, anything worth remembering"
+                        value={notes}
+                        onChangeText={setNotes}
+                        multiline
+                    />
+                </Animated.View>
 
-                <View
-                    style={{
-                        paddingVertical: space[4],
-                        paddingHorizontal: space[5],
-                        borderRadius: radius.lg,
-                        backgroundColor: colors.accentSoft,
-                        alignItems: 'center',
-                    }}
-                >
-                    <Text variant="label" tone="secondary">TOTAL</Text>
-                    <Text variant="title" tone="accent" style={{ marginTop: space[1] }}>
-                        {formatCurrency(total, currency, 2)}
-                    </Text>
-                </View>
-
-                <Button
-                    label="Save fuel entry"
-                    onPress={handleSave}
-                    disabled={!canSave}
-                    size="lg"
-                    fullWidth
-                />
+                <Animated.View entering={enter(300)} style={{ marginTop: space[1] }}>
+                    <Button
+                        label="Save fuel entry"
+                        onPress={handleSave}
+                        disabled={!canSave}
+                        size="lg"
+                        fullWidth
+                    />
+                </Animated.View>
             </ScrollView>
         </Sheet>
     );

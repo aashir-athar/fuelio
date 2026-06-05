@@ -1,3 +1,5 @@
+// Lever: endowed progress + status salience — the active vehicle is a full lime
+// hero so the one car you're tracking is unmistakable; the rest stay calm charcoal.
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
@@ -8,7 +10,7 @@ import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useVehicleStats } from '../../hooks/useVehicleStats';
 import { useSettingsStore } from '../../store/settings.store';
 import { useTheme } from '../../theme/ThemeProvider';
-import { radius, space, spring } from '../../theme/tokens';
+import { accentGlow, radius, space, spring } from '../../theme/tokens';
 import type { Vehicle } from '../../types';
 import { formatDistance, formatEfficiency } from '../../utils/format';
 import { Avatar } from '../primitives/Avatar';
@@ -36,6 +38,15 @@ export const VehicleCard = React.memo(function VehicleCard({ vehicle, active = f
     const hasEconomy = !!stats && stats.stats.averageEfficiency > 0;
     const economy = stats ? formatEfficiency(stats.stats.averageEfficiency, distanceUnit) : '—';
 
+    // On lime, "onAccent" tones read as near-black; charcoal cards use the usual scale.
+    const titleTone = active ? 'onAccent' : 'primary';
+    const subTone = active ? 'onAccent' : 'secondary';
+    // Sub-tiles sitting on lime are dark; on charcoal they're the base surface.
+    const tileBg = active ? colors.textOnAccent : colors.surface;
+    const tileIcon = active ? colors.accent : colors.textSecondary;
+    const dividerColor = active ? colors.scrim : colors.divider;
+    const economyTone = active ? 'onAccent' : hasEconomy ? 'accent' : 'muted';
+
     const handlePressIn = useCallback(() => {
         if (onPress && !reduceMotion) scale.value = withSpring(0.98, spring.snappy);
     }, [onPress, reduceMotion, scale]);
@@ -55,20 +66,23 @@ export const VehicleCard = React.memo(function VehicleCard({ vehicle, active = f
             onPressOut={handlePressOut}
             accessibilityRole="button"
             accessibilityLabel={vehicle.nickname}
+            accessibilityState={{ selected: active }}
             style={animStyle}
         >
             <Card
-                elevated
-                style={{
-                    borderWidth: active ? 1.5 : 0,
-                    borderColor: active ? colors.accent : 'transparent',
-                }}
+                tone={active ? 'lime' : 'elevated'}
+                style={active ? accentGlow(colors.accent) : undefined}
             >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[4] }}>
-                    <Avatar source={IMAGES.addVehicle} size={60} tinted={active} />
+                    <Avatar
+                        source={IMAGES.addVehicle}
+                        size={60}
+                        tinted={false}
+                        style={{ backgroundColor: active ? colors.textOnAccent : colors.accentSoft, borderRadius: radius.lg }}
+                    />
                     <View style={{ flex: 1, gap: 2 }}>
-                        <Text variant="heading" numberOfLines={1}>{vehicle.nickname}</Text>
-                        <Text variant="caption" tone="secondary" numberOfLines={1}>
+                        <Text variant="heading" tone={titleTone} numberOfLines={1}>{vehicle.nickname}</Text>
+                        <Text variant="caption" tone={subTone} numberOfLines={1} style={active ? { opacity: 0.7 } : undefined}>
                             {vehicle.year} · {vehicle.make} {vehicle.model}
                         </Text>
                     </View>
@@ -78,7 +92,7 @@ export const VehicleCard = React.memo(function VehicleCard({ vehicle, active = f
                                 style={{
                                     paddingHorizontal: space[3],
                                     paddingVertical: space[1],
-                                    backgroundColor: colors.accentMuted,
+                                    backgroundColor: colors.textOnAccent,
                                     borderRadius: radius.pill,
                                 }}
                             >
@@ -93,14 +107,14 @@ export const VehicleCard = React.memo(function VehicleCard({ vehicle, active = f
                             style={({ pressed }) => ({
                                 width: 44,
                                 height: 44,
-                                borderRadius: radius.md,
-                                backgroundColor: colors.surface,
+                                borderRadius: radius.pill,
+                                backgroundColor: tileBg,
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 opacity: pressed ? 0.6 : 1,
                             })}
                         >
-                            <Ionicons name="pencil" size={17} color={colors.textSecondary} />
+                            <Ionicons name="pencil" size={17} color={tileIcon} />
                         </Pressable>
                     </View>
                 </View>
@@ -108,16 +122,16 @@ export const VehicleCard = React.memo(function VehicleCard({ vehicle, active = f
                 <View
                     style={{
                         flexDirection: 'row',
-                        marginTop: space[4],
+                        marginTop: space[5],
                         paddingTop: space[4],
                         borderTopWidth: 1,
-                        borderTopColor: colors.divider,
+                        borderTopColor: dividerColor,
                         gap: space[4],
                     }}
                 >
                     <View style={{ flex: 1, gap: space[1] }}>
-                        <Text variant="micro" tone="muted">ODOMETER</Text>
-                        <Text variant="bodyLg" weight="semibold">
+                        <Text variant="micro" tone={active ? 'onAccent' : 'muted'} style={active ? { opacity: 0.6 } : undefined}>ODOMETER</Text>
+                        <Text variant="heading" tone={titleTone} numberOfLines={1}>
                             {formatDistance(vehicle.odometer, distanceUnit)}
                         </Text>
                     </View>
@@ -125,12 +139,12 @@ export const VehicleCard = React.memo(function VehicleCard({ vehicle, active = f
                         style={{
                             width: 1,
                             alignSelf: 'stretch',
-                            backgroundColor: colors.divider,
+                            backgroundColor: dividerColor,
                         }}
                     />
                     <View style={{ flex: 1, gap: space[1] }}>
-                        <Text variant="micro" tone="muted">AVG ECONOMY</Text>
-                        <Text variant="bodyLg" weight="semibold" tone={hasEconomy ? 'accent' : 'muted'}>
+                        <Text variant="micro" tone={active ? 'onAccent' : 'muted'} style={active ? { opacity: 0.6 } : undefined}>AVG ECONOMY</Text>
+                        <Text variant="heading" tone={economyTone} numberOfLines={1}>
                             {economy}
                         </Text>
                     </View>

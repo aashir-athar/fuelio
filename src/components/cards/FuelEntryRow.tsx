@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useSettingsStore } from '../../store/settings.store';
 import { useTheme } from '../../theme/ThemeProvider';
-import { duration, radius, space } from '../../theme/tokens';
+import { duration, fontFamily, radius, space } from '../../theme/tokens';
 import { formatCurrency, formatDistance, formatEfficiency, formatRelativeDate, formatVolume } from '../../utils/format';
 import type { ComputedFuelEntry } from '../../utils/fuelAlgorithm';
 import { Text } from '../primitives/Text';
@@ -34,10 +34,20 @@ export const FuelEntryRow = React.memo(function FuelEntryRow({ entry, onPress }:
                 ? colors.accent
                 : colors.warning;
 
+    // Volume fingerprint: number reads big, unit sits small beneath it.
+    const volumeStr = formatVolume(entry.liters, volumeUnit);
+    const [volumeValue, ...volumeUnitParts] = volumeStr.split(' ');
+    const volumeUnitLabel = volumeUnitParts.join(' ');
+
+    // Economy closer: split the same way so the figure stays large and confident.
+    const economyStr = showEconomy ? formatEfficiency(entry.efficiency, distanceUnit) : '—';
+    const [economyValue, ...economyUnitParts] = economyStr.split(' ');
+    const economyUnitLabel = economyUnitParts.join(' ');
+
     const press = useSharedValue(0);
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: 1 - press.value * 0.015 }],
-        backgroundColor: press.value > 0.5 ? colors.surfaceElevated : colors.surface,
+        backgroundColor: press.value > 0.5 ? colors.surface : 'transparent',
     }));
 
     const onPressIn = useCallback(() => {
@@ -48,13 +58,12 @@ export const FuelEntryRow = React.memo(function FuelEntryRow({ entry, onPress }:
         press.value = reduceMotion ? 0 : withTiming(0, { duration: duration.fast });
     }, [press, reduceMotion]);
 
-    const economyText = showEconomy ? formatEfficiency(entry.efficiency, distanceUnit) : '—';
     const a11yLabel =
         `${formatCurrency(entry.totalCost, currency, 2)}, ` +
-        `${formatVolume(entry.liters, volumeUnit)}, ` +
+        `${volumeStr}, ` +
         `${formatRelativeDate(entry.date)}, ` +
         `${entry.fullTank ? 'full tank' : 'partial fill'}` +
-        (showEconomy ? `, ${economyText}` : '') +
+        (showEconomy ? `, ${economyStr}` : '') +
         (hasAnomaly ? ', needs review' : '');
 
     return (
@@ -75,62 +84,65 @@ export const FuelEntryRow = React.memo(function FuelEntryRow({ entry, onPress }:
                         paddingVertical: space[3],
                         paddingHorizontal: space[4],
                         borderRadius: radius.lg,
-                        borderWidth: 1,
-                        borderColor: hasAnomaly ? colors.warning : colors.divider,
                     },
                     animatedStyle,
                 ]}
             >
                 <View
                     style={{
-                        width: 52,
-                        height: 52,
-                        borderRadius: radius.md,
-                        backgroundColor: colors.accentSoft,
+                        width: 60,
+                        height: 60,
+                        borderRadius: radius.lg,
+                        backgroundColor: hasAnomaly ? colors.surfaceElevated : colors.accentSoft,
+                        borderWidth: hasAnomaly ? 1 : 0,
+                        borderColor: colors.warning,
                         alignItems: 'center',
                         justifyContent: 'center',
                         paddingHorizontal: space[1],
                     }}
                 >
-                    <Text variant="bodyLg" weight="bold" tone="accent" numberOfLines={1}>
-                        {formatVolume(entry.liters, volumeUnit)}
+                    <Text
+                        style={{ fontFamily: fontFamily.display, fontSize: 22, lineHeight: 24, letterSpacing: -0.5, color: colors.accent }}
+                        numberOfLines={1}
+                    >
+                        {volumeValue}
                     </Text>
+                    <Text variant="micro" tone="muted" style={{ marginTop: 1 }}>{volumeUnitLabel}</Text>
                 </View>
 
-                <View style={{ flex: 1, gap: 2 }}>
-                    <Text variant="body" weight="semibold" numberOfLines={1}>
+                <View style={{ flex: 1, gap: space[2] }}>
+                    <Text variant="bodyLg" weight="semibold" numberOfLines={1}>
                         {formatCurrency(entry.totalCost, currency, 2)}
                     </Text>
-                    <Text variant="caption" tone="secondary" numberOfLines={1}>
-                        {formatRelativeDate(entry.date)} · {formatDistance(entry.odometer, distanceUnit)}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2], marginTop: 2 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
                         <Tag
-                            label={entry.fullTank ? 'Full' : 'Partial'}
-                            color={entry.fullTank ? colors.accent : colors.textMuted}
-                            tinted={entry.fullTank}
-                            tintColor={colors.accentSoft}
-                            borderColor={colors.divider}
+                            label={entry.fullTank ? 'FULL' : 'PARTIAL'}
+                            color={entry.fullTank ? colors.textOnAccent : colors.textSecondary}
+                            bg={entry.fullTank ? colors.accent : colors.surfaceElevated}
                         />
                         {hasAnomaly ? (
                             <Tag
-                                label={anomalyLabel(entry.anomalies[0]!)}
-                                color={colors.warning}
-                                tinted
-                                tintColor={colors.surfaceElevated}
-                                borderColor={colors.warning}
+                                label={anomalyLabel(entry.anomalies[0]!).toUpperCase()}
+                                color={colors.textOnAccent}
+                                bg={colors.warning}
                                 dot
                             />
                         ) : null}
+                        <Text variant="micro" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
+                            {formatRelativeDate(entry.date)} · {formatDistance(entry.odometer, distanceUnit)}
+                        </Text>
                     </View>
                 </View>
 
-                <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                    <Text variant="body" weight="semibold" style={{ color: economyColor }}>
-                        {economyText}
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text
+                        style={{ fontFamily: fontFamily.display, fontSize: 24, lineHeight: 26, letterSpacing: -0.5, color: economyColor }}
+                        numberOfLines={1}
+                    >
+                        {economyValue}
                     </Text>
-                    <Text variant="micro" tone="muted">
-                        {showEconomy ? 'measured' : 'no reading'}
+                    <Text variant="micro" tone="muted" style={{ marginTop: 1 }}>
+                        {showEconomy ? economyUnitLabel : 'no reading'}
                     </Text>
                 </View>
             </Animated.View>
@@ -141,13 +153,11 @@ export const FuelEntryRow = React.memo(function FuelEntryRow({ entry, onPress }:
 interface TagProps {
     label: string;
     color: string;
-    tinted: boolean;
-    tintColor: string;
-    borderColor: string;
+    bg: string;
     dot?: boolean;
 }
 
-const Tag = React.memo(function Tag({ label, color, tinted, tintColor, borderColor, dot = false }: TagProps) {
+const Tag = React.memo(function Tag({ label, color, bg, dot = false }: TagProps) {
     return (
         <View
             style={{
@@ -155,17 +165,15 @@ const Tag = React.memo(function Tag({ label, color, tinted, tintColor, borderCol
                 alignItems: 'center',
                 gap: space[1],
                 paddingHorizontal: space[2],
-                paddingVertical: 3,
+                paddingVertical: 4,
                 borderRadius: radius.pill,
-                backgroundColor: tinted ? tintColor : 'transparent',
-                borderWidth: 1,
-                borderColor,
+                backgroundColor: bg,
             }}
         >
             {dot ? (
                 <View style={{ width: 5, height: 5, borderRadius: radius.pill, backgroundColor: color }} />
             ) : null}
-            <Text variant="micro" weight="semibold" style={{ color }}>
+            <Text variant="micro" weight="bold" style={{ color, letterSpacing: 0.4 }}>
                 {label}
             </Text>
         </View>

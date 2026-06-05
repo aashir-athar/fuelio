@@ -1,6 +1,7 @@
-// Lever: progressive disclosure + peak-end. The header answers "what has this cost
-// me?" in one figure, the measured-window strip builds trust in the economy number,
-// and the log reads newest-first so the most recent fill (the freshest memory) leads.
+// Lever: peak-end + progressive disclosure. The screen opens on the single number
+// that answers "what has fuel cost me?" rendered huge and confident, the divided
+// stat card builds trust in the economy figure (and shows how much of the log is
+// measured), and the list reads newest-first so the freshest fill leads the recall.
 import { FuelEntryRow } from '@/src/components/cards/FuelEntryRow';
 import { Card } from '@/src/components/primitives/Card';
 import { EmptyState } from '@/src/components/primitives/EmptyState';
@@ -12,7 +13,7 @@ import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useVehicleStats } from '@/src/hooks/useVehicleStats';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { accentGlow, radius, space } from '@/src/theme/tokens';
+import { accentGlow, fontFamily, radius, space } from '@/src/theme/tokens';
 import type { ComputedFuelEntry } from '@/src/utils/fuelAlgorithm';
 import { formatCurrency, formatEfficiency, formatVolume } from '@/src/utils/format';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+type ThemeColors = ReturnType<typeof useTheme>['colors'];
 
 export default function FuelScreen() {
     const { colors } = useTheme();
@@ -64,32 +67,76 @@ export default function FuelScreen() {
     const totalFuel = stats?.stats.totalFuel ?? 0;
     const avgEfficiency = stats?.stats.averageEfficiency ?? 0;
 
-    const header = (
-        <View style={{ paddingTop: insets.top + space[3], paddingBottom: space[4] }}>
-            <Text variant="label" tone="secondary">FUEL HISTORY</Text>
-            <Text variant="display" style={{ marginTop: space[1], marginBottom: space[5] }}>
-                {formatCurrency(totalCost, currency)}
-            </Text>
+    // Share of the log that has a measured full-tank economy window behind it.
+    const measuredRatio = total > 0 ? Math.min(1, measured / total) : 0;
+    const measuredPct = Math.round(measuredRatio * 100);
 
-            <Card elevated padded={false}>
-                <View style={{ flexDirection: 'row', padding: space[5] }}>
-                    <SummaryStat label="Fills" value={`${measured}/${total}`} />
-                    <ColumnDivider />
-                    <SummaryStat label="Fuel" value={formatVolume(totalFuel, volumeUnit)} />
-                    <ColumnDivider />
-                    <SummaryStat
-                        label="Average"
-                        value={measured > 0 ? formatEfficiency(avgEfficiency, distanceUnit) : '—'}
-                        tone="accent"
-                    />
-                </View>
-                <View style={{ height: 1, backgroundColor: colors.divider, marginHorizontal: space[5] }} />
-                <Text variant="micro" tone="muted" style={{ padding: space[4], paddingTop: space[3] }}>
-                    {measured > 0
-                        ? `Average measured across ${measured} full-tank ${measured === 1 ? 'window' : 'windows'}`
-                        : 'Log two back-to-back full tanks to measure economy'}
+    const enter = (delay: number) =>
+        reduceMotion ? undefined : FadeInDown.duration(360).delay(delay);
+
+    const header = (
+        <View style={{ paddingTop: insets.top + space[4], paddingBottom: space[5] }}>
+            <Animated.View entering={enter(0)}>
+                <Text variant="micro" tone="secondary">TOTAL FUEL SPEND</Text>
+                <Text
+                    style={{
+                        fontFamily: fontFamily.display,
+                        fontSize: 64,
+                        lineHeight: 66,
+                        letterSpacing: -2,
+                        color: colors.textPrimary,
+                        marginTop: space[1],
+                    }}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                >
+                    {formatCurrency(totalCost, currency)}
                 </Text>
-            </Card>
+            </Animated.View>
+
+            {/* Signature divided stat card: Fills | Fuel | Average, key number in lime,
+                with a thin lime measured-progress bar and a small caption. */}
+            <Animated.View entering={enter(70)} style={{ marginTop: space[5] }}>
+                <Card tone="elevated" padded={false}>
+                    <View style={{ flexDirection: 'row', padding: space[5], paddingBottom: space[4] }}>
+                        <SummaryStat label="Fills" value={`${measured}/${total}`} colors={colors} />
+                        <ColumnDivider colors={colors} />
+                        <SummaryStat label="Fuel" value={formatVolume(totalFuel, volumeUnit)} colors={colors} />
+                        <ColumnDivider colors={colors} />
+                        <SummaryStat
+                            label="Average"
+                            value={measured > 0 ? formatEfficiency(avgEfficiency, distanceUnit) : '—'}
+                            tone="accent"
+                            colors={colors}
+                        />
+                    </View>
+
+                    <View style={{ paddingHorizontal: space[5] }}>
+                        <View
+                            style={{
+                                height: 6,
+                                borderRadius: radius.pill,
+                                backgroundColor: colors.divider,
+                                overflow: 'hidden',
+                            }}
+                        >
+                            <View
+                                style={{
+                                    width: `${Math.max(measuredPct, measured > 0 ? 6 : 0)}%`,
+                                    height: '100%',
+                                    borderRadius: radius.pill,
+                                    backgroundColor: colors.accent,
+                                }}
+                            />
+                        </View>
+                        <Text variant="micro" tone="muted" style={{ marginTop: space[3], paddingBottom: space[5] }}>
+                            {measured > 0
+                                ? `${measuredPct}% measured across ${measured} full-tank ${measured === 1 ? 'window' : 'windows'}`
+                                : 'Log two back-to-back full tanks to measure economy'}
+                        </Text>
+                    </View>
+                </Card>
+            </Animated.View>
         </View>
     );
 
@@ -165,16 +212,14 @@ export default function FuelScreen() {
 }
 
 const ItemSeparator = React.memo(function ItemSeparator() {
-    const { colors } = useTheme();
-    return (
-        <View style={{ height: 1, backgroundColor: colors.divider, marginHorizontal: space[4] }} />
-    );
+    return <View style={{ height: space[3] }} />;
 });
 
 interface SummaryStatProps {
     label: string;
     value: string;
     tone?: 'primary' | 'accent';
+    colors: ThemeColors;
 }
 
 const SummaryStat = React.memo(function SummaryStat({ label, value, tone = 'primary' }: SummaryStatProps) {
@@ -185,7 +230,7 @@ const SummaryStat = React.memo(function SummaryStat({ label, value, tone = 'prim
                 variant="heading"
                 tone={tone === 'accent' ? 'accent' : 'primary'}
                 numberOfLines={1}
-                style={{ marginTop: space[1] }}
+                style={{ marginTop: space[2] }}
             >
                 {value}
             </Text>
@@ -193,8 +238,7 @@ const SummaryStat = React.memo(function SummaryStat({ label, value, tone = 'prim
     );
 });
 
-const ColumnDivider = React.memo(function ColumnDivider() {
-    const { colors } = useTheme();
+const ColumnDivider = React.memo(function ColumnDivider({ colors }: { colors: ThemeColors }) {
     return (
         <View style={{ width: 1, backgroundColor: colors.divider, marginHorizontal: space[4], alignSelf: 'stretch' }} />
     );
