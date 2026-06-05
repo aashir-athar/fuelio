@@ -63,9 +63,12 @@ export function AddServiceSheet({ visible, onClose }: Props) {
   const [oilQty, setOilQty] = useState('');
   const [notes, setNotes] = useState('');
 
-  React.useEffect(() => {
+  // Re-seed the odometer each time the sheet opens (render-time reset; no setState-in-effect).
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (visible && vehicle) setOdometer(String(Math.round(kmToDisplay(vehicle.odometer, distanceUnit))));
-  }, [visible, vehicle, distanceUnit]);
+  }
 
   const selectedType = useMemo(() => SERVICE_TYPES.find((t) => t.value === type), [type]);
   const odoNum = parseFloat(odometer) || 0;

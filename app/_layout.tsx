@@ -13,7 +13,6 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -51,7 +50,7 @@ function RootNav() {
       const kind = response?.notification.request.content.data?.kind;
       if (kind === 'fueling-prompt') {
         router.navigate('/(tabs)');
-        useUiStore.getState().requestLogFuel();
+        useUiStore.getState().openLogFuel();
       } else if (kind === 'service-reminder') {
         router.navigate('/(tabs)/service');
       }

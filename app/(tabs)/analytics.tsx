@@ -36,10 +36,11 @@ export default function AnalyticsScreen() {
     const currency = useSettingsStore((s) => s.currency);
     const distanceUnit = useSettingsStore((s) => s.distanceUnit);
     const [range, setRange] = useState<Range>('month');
+    // Captured once at mount (lazy init) so range filtering stays pure during render.
+    const [now] = useState(() => Date.now());
 
     const filtered = useMemo(() => {
         if (!stats) return [];
-        const now = Date.now();
         const day = 86400000;
         const cutoff =
             range === 'month' ? now - 30 * day :
@@ -47,7 +48,7 @@ export default function AnalyticsScreen() {
                     range === 'year' ? now - 365 * day :
                         0;
         return stats.entries.filter((e) => e.date >= cutoff);
-    }, [stats, range]);
+    }, [stats, range, now]);
 
     const efficiencyPoints = useMemo(
         () => filtered

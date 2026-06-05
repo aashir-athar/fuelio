@@ -207,7 +207,6 @@ const styles = StyleSheet.create({
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 export default function TabsLayout() {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   // The pill is 64 pt tall + floatGap (12) + safe-area bottom + a tiny extra

@@ -50,11 +50,13 @@ export function AddFuelSheet({ visible, onClose }: Props) {
     const total = Math.round(litersNum * priceNum * 100) / 100;
     const canSave = litersNum > 0 && priceNum > 0 && odoNum > 0 && vehicle !== null;
 
-    React.useEffect(() => {
-        if (visible && vehicle) {
-            setOdometer(String(Math.round(kmToDisplay(vehicle.odometer, distanceUnit))));
-        }
-    }, [visible, vehicle, distanceUnit]);
+    // Re-seed the odometer each time the sheet opens (React render-time reset pattern;
+    // avoids calling setState inside an effect).
+    const [wasVisible, setWasVisible] = useState(visible);
+    if (visible !== wasVisible) {
+        setWasVisible(visible);
+        if (visible && vehicle) setOdometer(seedOdometer);
+    }
 
     const handleSave = () => {
         if (!canSave || !vehicle) return;

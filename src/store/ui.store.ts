@@ -2,15 +2,17 @@ import { create } from 'zustand';
 
 interface UiState {
   /**
-   * Bumped whenever something outside the Home screen (e.g. tapping an
-   * "Are you fueling?" notification) asks to open the quick fuel-log sheet.
-   * Home watches the value and opens the sheet on change. Transient — not persisted.
+   * Whether the quick fuel-log sheet should be open. Held in the store (not local
+   * Home state) so an "Are you fueling?" notification tap can open it from anywhere.
+   * Transient — not persisted.
    */
-  logFuelRequest: number;
-  requestLogFuel: () => void;
+  logFuelOpen: boolean;
+  openLogFuel: () => void;
+  closeLogFuel: () => void;
 }
 
-export const useUiStore = create<UiState>((set, get) => ({
-  logFuelRequest: 0,
-  requestLogFuel: () => set({ logFuelRequest: get().logFuelRequest + 1 }),
+export const useUiStore = create<UiState>((set) => ({
+  logFuelOpen: false,
+  openLogFuel: () => set({ logFuelOpen: true }),
+  closeLogFuel: () => set({ logFuelOpen: false }),
 }));

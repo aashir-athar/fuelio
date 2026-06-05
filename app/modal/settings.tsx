@@ -13,6 +13,7 @@ import { useTheme } from '@/src/theme/ThemeProvider';
 import { radius, space } from '@/src/theme/tokens';
 import type { Currency } from '@/src/types';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { Alert, Pressable, ScrollView, Switch, View } from 'react-native';
@@ -367,7 +368,7 @@ export default function SettingsModal() {
                         </Text>
                     </View>
                     <Text variant="caption" tone="muted" style={{ marginTop: space[2] }}>
-                        Fuelio v1.0.0
+                        {`Fuelio v${Constants.expoConfig?.version ?? '2.0.0'}`}
                     </Text>
                 </Card>
             </ScrollView>

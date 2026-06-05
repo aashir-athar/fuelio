@@ -43,15 +43,10 @@ export default function HomeScreen() {
   const currency = useSettingsStore((s) => s.currency);
   const distanceUnit = useSettingsStore((s) => s.distanceUnit);
 
-  const [fuelSheetVisible, setFuelSheetVisible] = React.useState(false);
-  const openFuelSheet = useCallback(() => setFuelSheetVisible(true), []);
-  const closeFuelSheet = useCallback(() => setFuelSheetVisible(false), []);
-
-  // Open the quick-log sheet when an "Are you fueling?" notification is tapped.
-  const logFuelRequest = useUiStore((s) => s.logFuelRequest);
-  React.useEffect(() => {
-    if (logFuelRequest > 0) setFuelSheetVisible(true);
-  }, [logFuelRequest]);
+  // Sheet open state lives in the UI store so a notification tap can open it.
+  const fuelSheetVisible = useUiStore((s) => s.logFuelOpen);
+  const openFuelSheet = useUiStore((s) => s.openLogFuel);
+  const closeFuelSheet = useUiStore((s) => s.closeLogFuel);
   const openSettings = useCallback(() => router.push('/modal/settings'), [router]);
   const openEntry = useCallback(
     (id: string) => router.push(`/modal/edit-fuel?id=${id}`),

@@ -9,11 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditVehicleModal() {
     const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
     const router = useRouter();
     const haptic = useHaptics();
     const { id } = useLocalSearchParams<{ id: string }>();
