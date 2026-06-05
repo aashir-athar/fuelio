@@ -1,4 +1,5 @@
 import '@/src/services/locationTask'; // registers the background station-watch task (must load at startup)
+import { AnimatedSplash } from '@/src/components/AnimatedSplash';
 import { useServiceNotifications } from '@/src/hooks/useServiceNotifications';
 import { resumeStationDetection } from '@/src/services/location';
 import { configureNotificationHandler } from '@/src/services/notifications';
@@ -11,7 +12,7 @@ import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -27,6 +28,7 @@ function RootNav() {
   const hasOnboarded = useSettingsStore((s) => s.hasCompletedOnboarding);
   const vehicleCount = useVehicleStore((s) => s.vehicles.length);
   const locationEnabled = useSettingsStore((s) => s.locationPromptEnabled);
+  const [splashDone, setSplashDone] = useState(false);
 
   // Keep OS-scheduled service reminders in sync with the data.
   useServiceNotifications();
@@ -90,6 +92,7 @@ function RootNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
+      {splashDone ? null : <AnimatedSplash onFinish={() => setSplashDone(true)} />}
     </>
   );
 }
