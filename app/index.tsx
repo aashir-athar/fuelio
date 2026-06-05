@@ -1,19 +1,15 @@
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View } from 'react-native';
 
 /**
- * Root redirect — the actual gating happens in _layout.tsx.
- * This file exists only so Expo Router has a root route to mount.
+ * Root route placeholder. All gating/redirects happen in the single navigation
+ * guard in _layout.tsx; this just gives Expo Router a mountable '/' that the guard
+ * immediately routes away from once the stores have hydrated. (Previously this
+ * hard-redirected to /(tabs), which raced the guard and could leak a non-onboarded
+ * user into the tabs.)
  */
 export default function Index() {
   const { colors } = useTheme();
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/(tabs)');
-  }, [router]);
-
   return <View style={{ flex: 1, backgroundColor: colors.background }} />;
 }

@@ -48,7 +48,7 @@ export const useFuelStore = create<FuelState>()(
         }
         return entry;
       },
-      updateEntry: (id, patch) =>
+      updateEntry: (id, patch) => {
         set({
           entries: get().entries.map((e) => {
             if (e.id !== id) return e;
@@ -69,9 +69,17 @@ export const useFuelStore = create<FuelState>()(
               totalCost: Math.round(liters * pricePerLiter * 100) / 100,
             };
           }),
-        }),
-      deleteEntry: (id) =>
-        set({ entries: get().entries.filter((e) => e.id !== id) }),
+        });
+        // Edits can lower the highest reading (e.g. correcting a typo); recompute the
+        // owning vehicle's odometer from history so it never stays stale/too high.
+        const entry = get().entries.find((e) => e.id === id);
+        if (entry) useVehicleStore.getState().syncOdometerFromHistory(entry.vehicleId);
+      },
+      deleteEntry: (id) => {
+        const entry = get().entries.find((e) => e.id === id);
+        set({ entries: get().entries.filter((e) => e.id !== id) });
+        if (entry) useVehicleStore.getState().syncOdometerFromHistory(entry.vehicleId);
+      },
       deleteForVehicle: (vehicleId) =>
         set({ entries: get().entries.filter((e) => e.vehicleId !== vehicleId) }),
       reset: () => set({ entries: [] }),

@@ -33,7 +33,7 @@ function RootNav() {
 
     if (!hasOnboarded && !inOnboarding) {
       router.replace('/(onboarding)/welcome');
-    } else if (hasOnboarded && vehicleCount === 0 && !inOnboarding) {
+    } else if (hasOnboarded && vehicleCount === 0 && !inOnboarding && !inModal) {
       router.replace('/(onboarding)/add-first-vehicle');
     } else if (hasOnboarded && vehicleCount > 0 && !inTabs && !inModal) {
       router.replace('/(tabs)');
