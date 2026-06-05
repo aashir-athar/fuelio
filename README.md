@@ -31,6 +31,11 @@
 [![License](https://img.shields.io/badge/License-MIT-8A94A8?style=flat-square)](#-license)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-B6F24D?style=flat-square)](#-contributing)
 
+[![Stars](https://img.shields.io/github/stars/aashir-athar/fuelio?style=flat-square&logo=github&color=B6F24D)](https://github.com/aashir-athar/fuelio/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/aashir-athar/fuelio?style=flat-square)](https://github.com/aashir-athar/fuelio/commits)
+[![Top language](https://img.shields.io/github/languages/top/aashir-athar/fuelio?style=flat-square&logo=typescript&logoColor=white)](https://github.com/aashir-athar/fuelio)
+[![Repo size](https://img.shields.io/github/repo-size/aashir-athar/fuelio?style=flat-square)](https://github.com/aashir-athar/fuelio)
+
 <br/>
 
 [**Features**](#-features) · [**The Algorithm**](#-the-fuel-algorithm) · [**Tech Stack**](#-tech-stack) · [**Architecture**](#-architecture) · [**Getting Started**](#-getting-started) · [**Build & Ship**](#-building-an-apk-with-eas) · [**FAQ**](#-faq) · [**Contributing**](#-contributing)
