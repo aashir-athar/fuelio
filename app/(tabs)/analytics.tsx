@@ -10,6 +10,7 @@ import { StatTile } from '@/src/components/primitives/StatTile';
 import { Text } from '@/src/components/primitives/Text';
 import { IMAGES } from '@/src/constants/images';
 import { useActiveVehicle } from '@/src/hooks/useActiveVehicle';
+import { usePartialEconomyEstimate } from '@/src/hooks/usePartialEstimate';
 import { useVehicleStats } from '@/src/hooks/useVehicleStats';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
@@ -33,6 +34,7 @@ export default function AnalyticsScreen() {
     const insets = useSafeAreaInsets();
     const vehicle = useActiveVehicle();
     const stats = useVehicleStats(vehicle?.id);
+    const partialEstimate = usePartialEconomyEstimate(vehicle?.id);
     const currency = useSettingsStore((s) => s.currency);
     const distanceUnit = useSettingsStore((s) => s.distanceUnit);
     const [range, setRange] = useState<Range>('month');
@@ -121,6 +123,28 @@ export default function AnalyticsScreen() {
                 value={range}
                 onChange={setRange}
             />
+
+            {s && s.computableEntryCount === 0 && partialEstimate ? (
+                <Card elevated style={{ marginTop: space[4], gap: space[2] }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text variant="label" tone="secondary">ESTIMATED ECONOMY</Text>
+                        <View style={{ paddingHorizontal: space[2], paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.accentSoft }}>
+                            <Text variant="micro" tone="accent" weight="semibold">
+                                {`${partialEstimate.confidenceLabel.toUpperCase()} CONFIDENCE`}
+                            </Text>
+                        </View>
+                    </View>
+                    <Text variant="display" tone="accent">
+                        {formatEfficiency(partialEstimate.economyCentral, distanceUnit)}
+                    </Text>
+                    <Text variant="caption" tone="secondary">
+                        {`Range ${formatNumber(partialEstimate.economyMin, 1)}–${formatEfficiency(partialEstimate.economyMax, distanceUnit)} · tightens with every km`}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                        Estimated from partial fills. Log one full tank, or set the tank level when you fill, for an exact number.
+                    </Text>
+                </Card>
+            ) : null}
 
             {filtered.length === 0 ? (
                 <View style={{ marginTop: space[6] }}>

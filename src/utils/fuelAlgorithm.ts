@@ -87,7 +87,7 @@ export interface ComputedFuelEntry extends FuelEntry {
     windowDistance: number;
     /** litres of fuel attributed to the window this fill closes (0 if none). */
     windowFuel: number;
-    /** true if this fill closed a full-to-full measurement window. */
+    /** true if this fill closed an exact measurement window (full-tank or known tank level). */
     isFullTankClosing: boolean;
 }
 
@@ -121,7 +121,8 @@ export function computeEntries(
     const computed: ComputedFuelEntry[] = [];
 
     // Forward window accumulator.
-    let anchorOdo: number | null = null; // odometer of the last full-tank fill
+    let anchorOdo: number | null = null; // odometer of the last measurement anchor
+    let anchorLevel = 0;                  // tank level (L) just after that anchor
     let carryFuel = 0;                    // banked partial-fill litres since the anchor
 
     for (let i = 0; i < vehicleEntries.length; i++) {
@@ -142,18 +143,33 @@ export function computeEntries(
             anomalies.push('overfill'); // 5% tolerance for pump rounding
         }
 
-        // ── Window economy (full-to-full) ──────────────────────────────────
+        // ── Window economy (full-to-full, generalized to known tank levels) ──
+        // A fill is a measurement ANCHOR when we know the tank level just after it:
+        // a full fill (level = capacity) OR a partial fill with a recorded
+        // tankLevelAfter. Between two anchors the economy is EXACT, because the level
+        // drop plus the fuel added across the window equals the fuel burned. A full
+        // fill is just the special case level = capacity.
+        const hasLevel = entry.tankLevelAfter != null && tankCapacity > 0;
+        const isAnchor = !isEV && (entry.fullTank || hasLevel);
+        const levelAfter = entry.fullTank
+            ? tankCapacity
+            : hasLevel
+                ? Math.min(tankCapacity, Math.max(0, entry.tankLevelAfter! * tankCapacity))
+                : 0;
+
         let efficiency = 0;
         let isValid = false;
         let windowDistance = 0;
-        let windowFuel = 0;
+        let windowFuel = 0; // fuel BURNED across the window (the economy denominator)
         let isFullTankClosing = false;
 
         if (!isEV) {
-            if (entry.fullTank) {
+            if (isAnchor) {
                 if (anchorOdo !== null) {
-                    // Close the window opened by the previous full fill.
-                    windowFuel = carryFuel + entry.liters; // banked partials + this fill
+                    // burned = (level at last anchor − level now) + fuel added across the
+                    // window. For full→full this reduces to (banked partials + this fill).
+                    const addedInWindow = carryFuel + entry.liters;
+                    windowFuel = anchorLevel - levelAfter + addedInWindow;
                     windowDistance = entry.odometer - anchorOdo;
                     if (windowFuel > 0 && windowDistance > 0) {
                         efficiency = windowDistance / windowFuel;
@@ -164,14 +180,15 @@ export function computeEntries(
                         }
                     }
                 }
-                // This full fill anchors the next window; its fuel belonged to the
-                // window just closed, so the next window starts empty.
+                // This anchor opens the next window; the fuel just added belonged to the
+                // window that just closed, so the next window starts empty.
                 anchorOdo = entry.odometer;
+                anchorLevel = levelAfter;
                 carryFuel = 0;
             } else {
-                // Partial fill: bank its fuel for the next full fill. (Partials before
-                // the first full fill are pre-baseline and get discarded when that
-                // first full fill resets the accumulator — they can't be measured.)
+                // Partial fill with no known level: bank its fuel for the next anchor.
+                // (Fills before the first anchor are pre-baseline and get discarded when
+                // that first anchor resets the accumulator — they can't be measured.)
                 carryFuel += entry.liters;
             }
         }
@@ -376,4 +393,105 @@ export function classifyEfficiency(
     const label: EfficiencyLabel =
         deltaPercent >= 8 ? 'excellent' : deltaPercent >= 2 ? 'good' : deltaPercent >= -5 ? 'average' : 'poor';
     return { score: +score.toFixed(1), delta: +deltaPercent.toFixed(1), label };
+}
+
+// ---------------------------------------------------------------------------
+// Partial-tank economy ESTIMATE (fallback when no exact window exists)
+// ---------------------------------------------------------------------------
+
+export interface PartialTankEstimate {
+    vehicleId: string;
+    economyCentral: number; // km/L best estimate = distance / fuel-added-after-first
+    economyMin: number;     // km/L guaranteed lower bound (from tank capacity)
+    economyMax: number;     // km/L guaranteed upper bound
+    relHalfWidth: number;   // (max - min) / (2 * central); shrinks ~ 1/distance
+    confidence: number;     // 0..100, rises with distance + anchor fills, floors at bias
+    confidenceLabel: 'low' | 'moderate' | 'high';
+    spanDistance: number;   // km
+    spanFuel: number;       // L added after the first fill
+    fillCount: number;
+}
+
+const PARTIAL_MIN_DISTANCE_KM = 300;
+const PARTIAL_TOL_MAX = 0.5;          // ±50% relative uncertainty => confidence 0
+const PARTIAL_FILL_NOISE_REL = 0.01;  // ~1% per-fill pump/slosh/temperature noise
+const PARTIAL_BIAS_FLOOR = 0.02;      // irreducible systematic floor (odometer/meter bias)
+
+const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+
+/**
+ * Honest economy ESTIMATE for partial-only logs (no full fills and no recorded tank
+ * levels). From the fuel-balance identity burned = fuelAdded + (levelStart − levelEnd),
+ * with each unknown endpoint level bounded by [0, capacity], the economy is a provable
+ * interval whose relative width shrinks ~ 1/distance. The endpoint anchors are the
+ * span's OWN first and last fills (their post-fill level lies in [f, C]) — using an
+ * arbitrary large interior fill would break the guarantee.
+ *
+ * Returns null when an exact window already exists (the precise path owns the number),
+ * for EVs, without a tank capacity, or when the data is too thin to be meaningful.
+ */
+export function estimatePartialEconomy(
+    entries: readonly FuelEntry[],
+    vehicleId: string,
+    tankCapacity = 0,
+    fuelType: FuelType = 'petrol',
+): PartialTankEstimate | null {
+    if (fuelType === 'ev' || tankCapacity <= 0) return null;
+
+    const computed = computeEntries(entries, vehicleId, tankCapacity, fuelType);
+    if (computed.some((e) => e.isFullTankClosing && e.isEfficiencyValid)) return null;
+
+    const span = computed.filter((e) => !e.anomalies.includes('overfill'));
+    if (span.length < 2) return null;
+
+    const first = span[0]!;
+    const last = span[span.length - 1]!;
+    const C = tankCapacity;
+
+    // End-to-end distance (not a sum of per-leg distances over a filtered array),
+    // minus any anomalous-distance legs inside the span.
+    let distance = Math.max(0, last.odometer - first.odometer);
+    for (let i = 1; i < span.length; i++) {
+        if (isAnomalousDistance(span[i]!)) distance -= span[i]!.distanceDriven;
+    }
+    if (distance < PARTIAL_MIN_DISTANCE_KM) return null;
+
+    // Fuel added back after the first fill (the first fill is the opening residual marker).
+    let fuelAfterFirst = 0;
+    for (let i = 1; i < span.length; i++) fuelAfterFirst += span[i]!.liters;
+    if (fuelAfterFirst <= 1e-6) return null;
+
+    // Endpoint anchors: the first/last fills' own volumes bound the endpoint levels.
+    const fStart = first.liters;
+    const fEnd = last.liters;
+    const EPS = 1e-6;
+    const burnedLo = Math.max(EPS, fuelAfterFirst + fStart - C); // best case (fewest litres burned)
+    const burnedHi = fuelAfterFirst + C - fEnd;                  // worst case (most burned)
+
+    const economyCentral = distance / fuelAfterFirst;
+    const economyMax = distance / burnedLo; // raw guaranteed bound (not clamped to plausibility)
+    const economyMin = distance / burnedHi;
+
+    const fillsAfterFirst = span.length - 1;
+    const sigmaEndpoint = Math.sqrt(((C - fStart) ** 2 + (C - fEnd) ** 2) / 12);
+    const sigmaRel = Math.sqrt(
+        (sigmaEndpoint / fuelAfterFirst) ** 2 +              // endpoint/capacity term ~ 1/F
+        PARTIAL_FILL_NOISE_REL ** 2 / Math.max(1, fillsAfterFirst) + // per-fill noise ~ 1/√N
+        PARTIAL_BIAS_FLOOR ** 2,                            // systematic floor
+    );
+    const confidence = Math.round(100 * clamp01(1 - sigmaRel / PARTIAL_TOL_MAX));
+    const confidenceLabel = confidence >= 80 ? 'high' : confidence >= 50 ? 'moderate' : 'low';
+
+    return {
+        vehicleId,
+        economyCentral: +economyCentral.toFixed(2),
+        economyMin: +economyMin.toFixed(2),
+        economyMax: +economyMax.toFixed(2),
+        relHalfWidth: +((economyMax - economyMin) / (2 * economyCentral)).toFixed(3),
+        confidence,
+        confidenceLabel,
+        spanDistance: Math.round(distance),
+        spanFuel: +fuelAfterFirst.toFixed(2),
+        fillCount: fillsAfterFirst,
+    };
 }

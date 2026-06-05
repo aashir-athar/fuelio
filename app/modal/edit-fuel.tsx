@@ -23,6 +23,13 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+const TANK_LEVELS = [
+    { label: '¼', value: 0.25 },
+    { label: '½', value: 0.5 },
+    { label: '¾', value: 0.75 },
+    { label: 'Full', value: 1 },
+] as const;
+
 export default function EditFuelModal() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -42,6 +49,7 @@ export default function EditFuelModal() {
     const [price, setPrice] = useState(entry ? String(+pricePerLitreToDisplay(entry.pricePerLiter, volumeUnit).toFixed(3)) : '');
     const [odometer, setOdometer] = useState(entry ? String(Math.round(kmToDisplay(entry.odometer, distanceUnit))) : '');
     const [fullTank, setFullTank] = useState(entry?.fullTank ?? true);
+    const [tankLevel, setTankLevel] = useState<number | null>(entry?.tankLevelAfter ?? null);
     const [notes, setNotes] = useState(entry?.notes ?? '');
 
     if (!entry) {
@@ -73,6 +81,7 @@ export default function EditFuelModal() {
                 ? displayToKm(parsedOdometer, distanceUnit)
                 : entry.odometer,
             fullTank,
+            tankLevelAfter: !fullTank && tankLevel != null ? tankLevel : undefined,
             notes: notes.trim() || undefined,
         });
         haptic('success');
@@ -122,6 +131,23 @@ export default function EditFuelModal() {
                     <Chip label="Full tank" selected={fullTank} onPress={() => setFullTank(true)} />
                     <Chip label="Partial" selected={!fullTank} onPress={() => setFullTank(false)} />
                 </View>
+                {fullTank ? null : (
+                    <View>
+                        <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
+                            TANK LEVEL NOW (OPTIONAL)
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: space[2] }}>
+                            {TANK_LEVELS.map((l) => (
+                                <Chip
+                                    key={l.value}
+                                    label={l.label}
+                                    selected={tankLevel === l.value}
+                                    onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
+                                />
+                            ))}
+                        </View>
+                    </View>
+                )}
                 <Input label="Notes" value={notes} onChangeText={setNotes} multiline />
                 <Button label="Save changes" onPress={handleSave} size="lg" fullWidth />
                 <Button label="Delete entry" onPress={handleDelete} variant="danger" fullWidth />

@@ -6,11 +6,11 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyEfficiency, computeEntries, computeStats } from '../src/utils/fuelAlgorithm.ts';
+import { classifyEfficiency, computeEntries, computeStats, estimatePartialEconomy } from '../src/utils/fuelAlgorithm.ts';
 
 let seq = 0;
-/** Build a FuelEntry. odo in km, liters in L, price per L. */
-const fill = (odometer, liters, fullTank, { price = 1, date = ++seq * 86400000 } = {}) => ({
+/** Build a FuelEntry. odo in km, liters in L, price per L, level = tank fraction after fill (0..1). */
+const fill = (odometer, liters, fullTank, { price = 1, date = ++seq * 86400000, level } = {}) => ({
   id: `f${++seq}`,
   vehicleId: 'v1',
   date,
@@ -18,6 +18,7 @@ const fill = (odometer, liters, fullTank, { price = 1, date = ++seq * 86400000 }
   pricePerLiter: price,
   odometer,
   fullTank,
+  tankLevelAfter: level,
   totalCost: Math.round(liters * price * 100) / 100,
 });
 
@@ -147,4 +148,56 @@ test('classifyEfficiency labels a clearly-better fill as good/excellent', () => 
   assert.equal(classifyEfficiency(10, base).label, 'average');
   assert.ok(['good', 'excellent'].includes(classifyEfficiency(13, base).label));
   assert.equal(classifyEfficiency(6, base).label, 'poor');
+});
+
+// ── 14. A recorded tank level turns a partial fill into an EXACT measurement ──
+test('tank level makes a partial fill an exact measurement', () => {
+  // C=50. Full at odo 0 (level 50). Partial at odo 500: add 30 L, tank now 0.8 => 40 L.
+  // burned = 50 - 40 + 30 = 40 over 500 km => 12.5 km/L.
+  const e = [fill(0, 40, true), fill(500, 30, false, { level: 0.8 })];
+  const s = computeStats(e, 'v1', 50, 'petrol');
+  assert.ok(approx(s.averageEfficiency, 12.5), `got ${s.averageEfficiency}`);
+  assert.equal(s.computableEntryCount, 1);
+});
+
+// ── 15. Partial-ONLY (never fills full) still gets exact economy via levels ───
+test('partial-only with tank levels yields exact economy', () => {
+  // C=50. odo 0: add 20, level 0.5 (=25). odo 400: add 30, level 0.7 (=35).
+  // burned = 25 - 35 + 30 = 20 over 400 km => 20 km/L.
+  const e = [fill(0, 20, false, { level: 0.5 }), fill(400, 30, false, { level: 0.7 })];
+  const s = computeStats(e, 'v1', 50, 'petrol');
+  assert.ok(approx(s.averageEfficiency, 20), `got ${s.averageEfficiency}`);
+  assert.equal(s.computableEntryCount, 1);
+});
+
+// ── 16. estimatePartialEconomy defers to the exact path when a window exists ──
+test('estimatePartialEconomy returns null when an exact window exists', () => {
+  const e = [fill(0, 40, true), fill(500, 50, true)];
+  assert.equal(estimatePartialEconomy(e, 'v1', 60, 'petrol'), null);
+});
+
+// ── 17. estimatePartialEconomy brackets the true economy (partial-only) ───────
+test('estimatePartialEconomy brackets the true economy and centers on it', () => {
+  // True 12 km/L, C=50. Each leg: drive 240 km, burn 20 L, refill 20 L (partial, no level).
+  const e = [];
+  let odo = 0;
+  for (let k = 0; k < 12; k++) { e.push(fill(odo, 20, false)); odo += 240; }
+  const est = estimatePartialEconomy(e, 'v1', 50, 'petrol');
+  assert.ok(est, 'estimate should be produced');
+  assert.ok(est.economyMin <= 12 && 12 <= est.economyMax, `12 not in [${est.economyMin}, ${est.economyMax}]`);
+  assert.ok(approx(est.economyCentral, 12, 0.01), `central ${est.economyCentral}`);
+});
+
+// ── 18. estimatePartialEconomy anchors on the ENDPOINT fills, not an interior one
+test('estimatePartialEconomy uses first/last fill volumes as anchors (verifier fix)', () => {
+  // first=2 L splash, big 45 L interior, last=20 L. C=50. If it (wrongly) used the
+  // 45 L interior as an anchor the bounds would differ.
+  const e = [fill(0, 2, false), fill(600, 45, false), fill(1800, 20, false)];
+  const est = estimatePartialEconomy(e, 'v1', 50, 'petrol');
+  assert.ok(est);
+  const D = 1800, fuelAfterFirst = 45 + 20; // 65
+  const burnedLo = Math.max(1e-6, fuelAfterFirst + 2 - 50); // fStart = first.liters = 2 -> 17
+  const burnedHi = fuelAfterFirst + 50 - 20;                // fEnd = last.liters = 20 -> 95
+  assert.ok(approx(est.economyMax, D / burnedLo, 0.05), `max ${est.economyMax} vs ${D / burnedLo}`);
+  assert.ok(approx(est.economyMin, D / burnedHi, 0.05), `min ${est.economyMin} vs ${D / burnedHi}`);
 });

@@ -26,6 +26,14 @@ interface Props {
     onClose: () => void;
 }
 
+/** Fuel-gauge marks for the optional "tank level after a partial fill" input. */
+const TANK_LEVELS = [
+    { label: '¼', value: 0.25 },
+    { label: '½', value: 0.5 },
+    { label: '¾', value: 0.75 },
+    { label: 'Full', value: 1 },
+] as const;
+
 export function AddFuelSheet({ visible, onClose }: Props) {
     const { colors } = useTheme();
     const vehicle = useActiveVehicle();
@@ -41,6 +49,7 @@ export function AddFuelSheet({ visible, onClose }: Props) {
     const [price, setPrice] = useState('');
     const [odometer, setOdometer] = useState(seedOdometer);
     const [fullTank, setFullTank] = useState(true);
+    const [tankLevel, setTankLevel] = useState<number | null>(null);
     const [notes, setNotes] = useState('');
 
     const litersNum = parseFloat(liters) || 0;
@@ -68,12 +77,14 @@ export function AddFuelSheet({ visible, onClose }: Props) {
             pricePerLiter: displayToPricePerLitre(priceNum, volumeUnit),
             odometer: displayToKm(odoNum, distanceUnit),
             fullTank,
+            tankLevelAfter: !fullTank && tankLevel != null ? tankLevel : undefined,
             notes: notes.trim() || undefined,
         });
         haptic('success');
         setLiters('');
         setPrice('');
         setNotes('');
+        setTankLevel(null);
         onClose();
     };
 
@@ -128,8 +139,25 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                     <Text variant="caption" tone="muted" style={{ marginTop: space[2] }}>
                         {fullTank
                             ? 'Filled to the top — this is what measures your real economy.'
-                            : "Didn't fill all the way? This rolls into your next full-tank reading."}
+                            : 'Set the tank level after filling for an exact reading, or leave it and it rolls into your next full tank.'}
                     </Text>
+                    {fullTank ? null : (
+                        <View style={{ marginTop: space[3] }}>
+                            <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
+                                TANK LEVEL NOW (OPTIONAL)
+                            </Text>
+                            <View style={{ flexDirection: 'row', gap: space[2] }}>
+                                {TANK_LEVELS.map((l) => (
+                                    <Chip
+                                        key={l.value}
+                                        label={l.label}
+                                        selected={tankLevel === l.value}
+                                        onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
+                                    />
+                                ))}
+                            </View>
+                        </View>
+                    )}
                 </View>
 
                 <Input
