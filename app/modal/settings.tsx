@@ -3,6 +3,7 @@ import { SectionHeader } from '@/src/components/primitives/SectionHeader';
 import { SegmentedControl } from '@/src/components/primitives/SegmentedControl';
 import { Text } from '@/src/components/primitives/Text';
 import { useHaptics } from '@/src/hooks/useHaptics';
+import { requestNotificationPermission } from '@/src/services/notifications';
 import { useFuelStore } from '@/src/store/fuel.store';
 import { useServiceStore } from '@/src/store/service.store';
 import { useSettingsStore } from '@/src/store/settings.store';
@@ -160,6 +161,23 @@ export default function SettingsModal() {
         [haptic, setCurrency],
     );
 
+    const onToggleNotifications = useCallback(
+        async (value: boolean) => {
+            if (value) {
+                const granted = await requestNotificationPermission();
+                if (!granted) {
+                    Alert.alert(
+                        'Allow notifications',
+                        'To get service reminders, turn on notifications for Fuelio in your device settings.',
+                    );
+                    return;
+                }
+            }
+            setNotificationsEnabled(value);
+        },
+        [setNotificationsEnabled],
+    );
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <View
@@ -283,7 +301,7 @@ export default function SettingsModal() {
                         right={
                             <Switch
                                 value={notificationsEnabled}
-                                onValueChange={setNotificationsEnabled}
+                                onValueChange={onToggleNotifications}
                                 trackColor={{ true: colors.accent, false: colors.divider }}
                                 thumbColor={colors.surface}
                             />

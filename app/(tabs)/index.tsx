@@ -17,6 +17,7 @@ import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useServiceReminders } from '@/src/hooks/useServiceReminders';
 import { useVehicleStats } from '@/src/hooks/useVehicleStats';
 import { useSettingsStore } from '@/src/store/settings.store';
+import { useUiStore } from '@/src/store/ui.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
 import { accentGlow, radius, space } from '@/src/theme/tokens';
 import type { ComputedFuelEntry } from '@/src/utils/fuelAlgorithm';
@@ -45,6 +46,12 @@ export default function HomeScreen() {
   const [fuelSheetVisible, setFuelSheetVisible] = React.useState(false);
   const openFuelSheet = useCallback(() => setFuelSheetVisible(true), []);
   const closeFuelSheet = useCallback(() => setFuelSheetVisible(false), []);
+
+  // Open the quick-log sheet when an "Are you fueling?" notification is tapped.
+  const logFuelRequest = useUiStore((s) => s.logFuelRequest);
+  React.useEffect(() => {
+    if (logFuelRequest > 0) setFuelSheetVisible(true);
+  }, [logFuelRequest]);
   const openSettings = useCallback(() => router.push('/modal/settings'), [router]);
   const openEntry = useCallback(
     (id: string) => router.push(`/modal/edit-fuel?id=${id}`),
