@@ -18,8 +18,12 @@ export const STATION_TASK = 'fuelio-station-watch';
 
 const LAST_CHECK_KEY = 'fuelio.station.lastCheck';
 const LAST_PROMPT_KEY = 'fuelio.station.lastPrompt';
+const LAST_SEEN_KEY = 'fuelio.station.lastSeen'; // dwell marker: previous batch was in-radius
 const MIN_CHECK_INTERVAL_MS = 3 * 60 * 1000; // don't query Overpass more than every 3 min
 const MIN_PROMPT_INTERVAL_MS = 30 * 60 * 1000; // don't prompt more than every 30 min
+// A confirming second batch must arrive within this window of the first to count as a
+// genuine dwell — otherwise the marker is treated as stale and the count restarts.
+const DWELL_WINDOW_MS = 12 * 60 * 1000;
 const STATION_RADIUS_M = 70;
 
 TaskManager.defineTask<{ locations?: LocationObject[] }>(STATION_TASK, async ({ data, error }) => {
@@ -40,7 +44,26 @@ TaskManager.defineTask<{ locations?: LocationObject[] }>(STATION_TASK, async ({ 
       loc.coords.longitude,
       STATION_RADIUS_M,
     );
-    if (!station) return;
+    if (!station) {
+      // Out of radius — break the dwell streak so drive-bys can't accumulate
+      // a phantom "second" hit later.
+      await AsyncStorage.removeItem(LAST_SEEN_KEY);
+      return;
+    }
+
+    // ── Dwell gate ────────────────────────────────────────────────────────
+    // Require TWO consecutive in-radius batches before prompting. A single hit
+    // (driving past / stopped at a red light next to a station) only records the
+    // marker; the prompt fires on the second consecutive confirmation.
+    const lastSeen = Number((await AsyncStorage.getItem(LAST_SEEN_KEY)) ?? '0');
+    const isConsecutive = lastSeen > 0 && now - lastSeen <= DWELL_WINDOW_MS;
+    if (!isConsecutive) {
+      // First sighting (or a stale marker): arm the dwell and wait for confirmation.
+      await AsyncStorage.setItem(LAST_SEEN_KEY, String(now));
+      return;
+    }
+    // Confirmed dwell — clear the marker so the next visit starts a fresh streak.
+    await AsyncStorage.removeItem(LAST_SEEN_KEY);
 
     const lastPrompt = Number((await AsyncStorage.getItem(LAST_PROMPT_KEY)) ?? '0');
     if (now - lastPrompt < MIN_PROMPT_INTERVAL_MS) return;

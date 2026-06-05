@@ -31,12 +31,6 @@ export interface FuelEntry {
     pricePerLiter: number;
     odometer: number;
     fullTank: boolean;
-    /**
-     * Optional tank fill level (0..1 fraction of capacity) just AFTER this fill.
-     * When set on a partial fill, it turns that fill into an exact measurement point
-     * (a full fill is implicitly 1.0). Lets partial-only drivers get exact economy.
-     */
-    tankLevelAfter?: number;
     notes?: string;
     receiptUri?: string;
     // Computed — stored to avoid recalculation on every render

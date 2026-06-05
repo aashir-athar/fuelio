@@ -87,7 +87,7 @@ export interface ComputedFuelEntry extends FuelEntry {
     windowDistance: number;
     /** litres of fuel attributed to the window this fill closes (0 if none). */
     windowFuel: number;
-    /** true if this fill closed an exact measurement window (full-tank or known tank level). */
+    /** true if this fill closed an exact measurement window (a FULL tank to FULL tank). */
     isFullTankClosing: boolean;
 }
 
@@ -440,12 +440,14 @@ export function estimatePartialEconomy(
     const first = span[0]!;
     const last = span[span.length - 1]!;
     const C = tankCapacity;
+    const bounds = EFFICIENCY_BOUNDS[fuelType];
 
-    // End-to-end distance (not a sum of per-leg distances over a filtered array),
-    // minus any anomalous-distance legs inside the span.
-    let distance = Math.max(0, last.odometer - first.odometer);
+    // Distance = sum of the per-leg distances for non-anomalous legs only (skip the
+    // first leg, which has no prior fill). Anomalous legs (regression/duplicate/
+    // excessive) contribute neither their distance nor the fuel that crossed them.
+    let distance = 0;
     for (let i = 1; i < span.length; i++) {
-        if (isAnomalousDistance(span[i]!)) distance -= span[i]!.distanceDriven;
+        if (!isAnomalousDistance(span[i]!)) distance += span[i]!.distanceDriven;
     }
     if (distance < PARTIAL_MIN_DISTANCE_KM) return null;
 
@@ -458,12 +460,21 @@ export function estimatePartialEconomy(
     const fStart = first.liters;
     const fEnd = last.liters;
     const EPS = 1e-6;
-    const burnedLo = Math.max(EPS, fuelAfterFirst + fStart - C); // best case (fewest litres burned)
-    const burnedHi = fuelAfterFirst + C - fEnd;                  // worst case (most burned)
+
+    // Clamp the burn interval to physical bounds so a small fill into a big tank
+    // (fuelAfterFirst + fStart < C) can't collapse burnedLo to EPS and blow the
+    // economyMax/relHalfWidth up to "999999". The burn can never be less than the
+    // most-efficient case (distance / bounds.max) nor more than the least-efficient
+    // (distance / bounds.min). The fuel-balance endpoint bounds still apply on top,
+    // so genuine endpoint fills — not the interior — drive the interval.
+    const burnFloor = bounds.max > 0 ? distance / bounds.max : EPS;   // can't burn less than the most-efficient case
+    const burnCeil = bounds.min > 0 ? distance / bounds.min : (fuelAfterFirst + C);
+    const burnedLo = Math.max(burnFloor, fuelAfterFirst + fStart - C, EPS); // best case (fewest litres burned)
+    const burnedHi = Math.max(burnedLo, Math.min(burnCeil, fuelAfterFirst + C - fEnd)); // worst case (most burned)
 
     const economyCentral = distance / fuelAfterFirst;
-    const economyMax = distance / burnedLo; // raw guaranteed bound (not clamped to plausibility)
-    const economyMin = distance / burnedHi;
+    const economyMax = distance / burnedLo; // guaranteed upper bound, clamped to plausibility
+    const economyMin = distance / burnedHi; // guaranteed lower bound, clamped to plausibility
 
     const fillsAfterFirst = span.length - 1;
     const sigmaEndpoint = Math.sqrt(((C - fStart) ** 2 + (C - fEnd) ** 2) / 12);

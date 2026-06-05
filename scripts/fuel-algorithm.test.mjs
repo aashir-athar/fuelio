@@ -198,14 +198,20 @@ test('estimatePartialEconomy brackets the true economy and centers on it', () =>
 
 // ── 18. estimatePartialEconomy anchors on the ENDPOINT fills, not an interior one
 test('estimatePartialEconomy uses first/last fill volumes as anchors (verifier fix)', () => {
-  // first=2 L splash, big 45 L interior, last=20 L. C=50. If it (wrongly) used the
-  // 45 L interior as an anchor the bounds would differ.
-  const e = [fill(0, 2, false), fill(600, 45, false), fill(1800, 20, false)];
+  // first=40 L, big 45 L interior, last=20 L. C=50. The endpoint volumes are chosen so
+  // the fuel-balance endpoint bounds land INSIDE the physical-plausibility clamp — so the
+  // ENDPOINT fills (not the 45 L interior, and not the clamp) drive the interval.
+  const e = [fill(0, 40, false), fill(600, 45, false), fill(1800, 20, false)];
   const est = estimatePartialEconomy(e, 'v1', 50, 'petrol');
   assert.ok(est);
   const D = 1800, fuelAfterFirst = 45 + 20; // 65
-  const burnedLo = Math.max(1e-6, fuelAfterFirst + 2 - 50); // fStart = first.liters = 2 -> 17
-  const burnedHi = fuelAfterFirst + 50 - 20;                // fEnd = last.liters = 20 -> 95
+  const bounds = { min: 3, max: 35 }; // petrol — must match EFFICIENCY_BOUNDS
+  const burnFloor = D / bounds.max; // 51.43 — physical floor (most-efficient case)
+  const burnCeil = D / bounds.min;  // 600   — physical ceil  (least-efficient case)
+  // Same clamp formulas as estimatePartialEconomy. fStart=40 -> endpoint 55 > 51.43 (endpoint
+  // drives burnedLo); fEnd=20 -> endpoint 95 < 600 (endpoint drives burnedHi).
+  const burnedLo = Math.max(burnFloor, fuelAfterFirst + 40 - 50, 1e-6); // -> 55
+  const burnedHi = Math.max(burnedLo, Math.min(burnCeil, fuelAfterFirst + 50 - 20)); // -> 95
   assert.ok(approx(est.economyMax, D / burnedLo, 0.05), `max ${est.economyMax} vs ${D / burnedLo}`);
   assert.ok(approx(est.economyMin, D / burnedHi, 0.05), `min ${est.economyMin} vs ${D / burnedHi}`);
 });

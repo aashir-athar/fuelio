@@ -41,3 +41,10 @@ app-example
 # generated native folders
 /ios
 /android
+
+# local-only — never publish to GitHub
+design-reference/
+_emu_*.png
+*_shot*.png
+council-report-*.html
+council-transcript-*.md

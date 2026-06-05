@@ -31,16 +31,11 @@ export const useFuelStore = create<FuelState>()(
         // Round totalCost to 2 decimal places using a multiply-round-divide approach
         // to avoid floating-point errors (e.g. 0.1*0.2 = 0.020000000000000004).
         const totalCost = Math.round(liters * pricePerLiter * 100) / 100;
-        const tankLevelAfter =
-          data.tankLevelAfter != null && Number.isFinite(data.tankLevelAfter)
-            ? Math.min(1, Math.max(0, data.tankLevelAfter))
-            : undefined;
         const entry: FuelEntry = {
           ...data,
           liters,
           pricePerLiter,
           odometer,
-          tankLevelAfter,
           id: createId('fuel'),
           totalCost,
         };
@@ -66,16 +61,11 @@ export const useFuelStore = create<FuelState>()(
             const odometer = Number.isFinite(next.odometer) && next.odometer >= 0
               ? next.odometer
               : e.odometer;
-            const tankLevelAfter =
-              next.tankLevelAfter != null && Number.isFinite(next.tankLevelAfter)
-                ? Math.min(1, Math.max(0, next.tankLevelAfter))
-                : undefined;
             return {
               ...next,
               liters,
               pricePerLiter,
               odometer,
-              tankLevelAfter,
               totalCost: Math.round(liters * pricePerLiter * 100) / 100,
             };
           }),
@@ -98,6 +88,8 @@ export const useFuelStore = create<FuelState>()(
       name: 'fuelio.fuel',
       storage: createAsyncStorage(),
       version: 1,
+      // No-op migration seam: future schema bumps (version > 1) reshape `state` here.
+      migrate: (state, _version) => state as FuelState,
     },
   ),
 );

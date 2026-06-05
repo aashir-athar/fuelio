@@ -6,6 +6,7 @@ import { Text } from '@/src/components/primitives/Text';
 import { AddFuelSheet } from '@/src/components/sheets/AddFuelSheet';
 import { IMAGES } from '@/src/constants/images';
 import { useActiveVehicle } from '@/src/hooks/useActiveVehicle';
+import { usePartialEconomyEstimate } from '@/src/hooks/usePartialEstimate';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useServiceReminders } from '@/src/hooks/useServiceReminders';
 import { useVehicleStats } from '@/src/hooks/useVehicleStats';
@@ -32,6 +33,7 @@ export default function HomeScreen() {
 
   const vehicle = useActiveVehicle();
   const stats = useVehicleStats(vehicle?.id);
+  const partialEstimate = usePartialEconomyEstimate(vehicle?.id);
   const reminders = useServiceReminders(vehicle?.id);
 
   const currency = useSettingsStore((s) => s.currency);
@@ -56,13 +58,23 @@ export default function HomeScreen() {
   const upcoming = reminders.slice(0, 2);
 
   const eff = s?.averageEfficiency ?? 0;
-  const effStr = ready && eff > 0 ? formatEfficiency(eff, distanceUnit) : null;
+  const hasMeasured = ready && eff > 0;
+  // When no full-tank window exists yet, fall back to the capacity-bounded
+  // partial estimate (same hook analytics uses) instead of a dead "—".
+  const estimate = !hasMeasured ? partialEstimate : null;
+
+  const measuredStr = hasMeasured ? formatEfficiency(eff, distanceUnit) : null;
+  const estimateStr = estimate ? formatEfficiency(estimate.economyCentral, distanceUnit) : null;
+  const effStr = measuredStr ?? estimateStr;
   const effParts = effStr ? effStr.split(' ') : null;
-  const effNumber = effParts ? effParts[0] : '—';
-  const effUnit = effParts ? effParts.slice(1).join(' ') : 'no full tank yet';
+  // Estimates are prefixed with "~" to read as approximate, never as a hard claim.
+  const effNumber = effParts ? `${estimate ? '~' : ''}${effParts[0]}` : '—';
+  const effUnit = effParts ? effParts.slice(1).join(' ') : 'Log a full tank to unlock economy';
 
   const trend = s?.efficiencyTrend;
   const trendLabel = trend === 'improving' ? 'Improving' : trend === 'declining' ? 'Declining' : 'Steady';
+  // A single window labeled "Steady" is an unearned claim — require >= 3 measured windows.
+  const showTrend = hasMeasured && (s?.computableEntryCount ?? 0) >= 3;
 
   const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(380).delay(delay));
 
@@ -98,7 +110,7 @@ export default function HomeScreen() {
           <Card tone="lime" style={[{ overflow: 'hidden' }, accentGlow(colors.accent)]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <Text variant="micro" tone="onAccent" style={{ opacity: 0.65 }}>FUEL ECONOMY</Text>
-              {effStr ? (
+              {showTrend ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(13,17,23,0.12)', paddingHorizontal: space[3], paddingVertical: 5, borderRadius: radius.pill }}>
                   <Ionicons
                     name={trend === 'improving' ? 'trending-up' : trend === 'declining' ? 'trending-down' : 'remove'}
@@ -106,6 +118,10 @@ export default function HomeScreen() {
                     color={colors.textOnAccent}
                   />
                   <Text variant="micro" tone="onAccent" weight="semibold">{trendLabel}</Text>
+                </View>
+              ) : estimate ? (
+                <View style={{ backgroundColor: 'rgba(13,17,23,0.12)', paddingHorizontal: space[3], paddingVertical: 5, borderRadius: radius.pill }}>
+                  <Text variant="micro" tone="onAccent" weight="semibold">{`${estimate.confidenceLabel} confidence`}</Text>
                 </View>
               ) : null}
             </View>

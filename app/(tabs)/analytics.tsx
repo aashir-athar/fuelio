@@ -105,6 +105,8 @@ export default function AnalyticsScreen() {
     const heroParts = heroStr ? heroStr.split(' ') : null;
     const heroNumber = heroParts ? heroParts[0] : '—';
     const heroUnit = heroParts ? heroParts.slice(1).join(' ') : 'no full tank yet';
+    // A single window labeled "Steady" is an unearned claim — require >= 3 measured windows.
+    const showTrend = !!heroStr && (s?.computableEntryCount ?? 0) >= 3;
 
     const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(380).delay(delay));
 
@@ -129,7 +131,7 @@ export default function AnalyticsScreen() {
                 <Card tone="lime" style={[{ overflow: 'hidden' }, accentGlow(colors.accent)]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <Text variant="micro" tone="onAccent" style={{ opacity: 0.65 }}>AVERAGE ECONOMY</Text>
-                        {heroStr ? (
+                        {showTrend ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.scrim, paddingHorizontal: space[3], paddingVertical: 5, borderRadius: radius.pill }}>
                                 <Ionicons name={trendIcon} size={13} color={colors.accent} />
                                 <Text variant="micro" tone="accent" weight="semibold">{TREND_LABEL[trend]}</Text>
@@ -179,7 +181,7 @@ export default function AnalyticsScreen() {
                             {`Range ${formatNumber(partialEstimate.economyMin, 1)}–${formatEfficiency(partialEstimate.economyMax, distanceUnit)} · tightens with every km`}
                         </Text>
                         <Text variant="caption" tone="muted">
-                            Estimated from partial fills. Log one full tank, or set the tank level when you fill, for an exact number.
+                            Estimated from partial fills. Log one full tank for an exact number.
                         </Text>
                     </Card>
                 </Animated.View>

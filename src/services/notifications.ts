@@ -5,6 +5,16 @@ import type { EfficiencyStat } from '../types';
 import { serviceTypeLabel } from '../utils/serviceLabels';
 
 /**
+ * Minimal date-bearing shape we need to derive a true km/day rate without trusting
+ * the already-rounded interval averages on EfficiencyStat. Any FuelEntry / computed
+ * entry satisfies this, so callers pass their existing entries unchanged.
+ */
+export interface DatedEntry {
+  /** Epoch milliseconds of the fill. */
+  date: number;
+}
+
+/**
  * Local, OS-scheduled notifications — they fire even when the app is fully killed
  * (no server, stays offline). Two uses:
  *   1. Service reminders: mileage-based, so we estimate the calendar date the vehicle
@@ -71,22 +81,54 @@ async function cancelByKind(kind: string): Promise<void> {
 }
 
 /**
+ * Derive a true km/day rate for ETA estimation.
+ *
+ * The old path computed `stats.avgKmBetweenFills / stats.avgDaysBetweenFills`, but
+ * BOTH of those are already rounded to 1 dp on EfficiencyStat — dividing two rounded
+ * ratios compounds the error and drifts reminder ETAs by days. Instead we use the
+ * raw, unrounded `stats.totalDistance` over the actual calendar span between the
+ * first and last fill (from the entry dates). Falls back to the rounded ratio only
+ * when no usable date span is available, and guards every divide-by-zero.
+ */
+function deriveKmPerDay(stats: EfficiencyStat | null, entries?: readonly DatedEntry[]): number {
+  if (!stats || stats.totalDistance <= 0) return 0;
+
+  // Preferred: raw total distance over the real first→last calendar span.
+  if (entries && entries.length >= 2) {
+    let minDate = Infinity;
+    let maxDate = -Infinity;
+    for (const e of entries) {
+      if (e.date < minDate) minDate = e.date;
+      if (e.date > maxDate) maxDate = e.date;
+    }
+    const spanDays = (maxDate - minDate) / MS_PER_DAY;
+    if (spanDays > 0) return stats.totalDistance / spanDays;
+  }
+
+  // Fallback: the (rounded) interval averages. Less precise, but better than nothing.
+  return stats.avgDaysBetweenFills > 0 ? stats.avgKmBetweenFills / stats.avgDaysBetweenFills : 0;
+}
+
+/**
  * Reschedule all service-reminder notifications for the active vehicle. Cancels any
  * previously scheduled ones first so edits/new fills don't pile up duplicates.
+ *
+ * `entries` (optional, additive) supplies the dated fills used to compute an accurate
+ * km/day rate; omit it and the function falls back to the rounded interval averages.
  */
 export async function rescheduleServiceReminders(params: {
   enabled: boolean;
   vehicleName: string;
   reminders: ServiceReminder[];
   stats: EfficiencyStat | null;
+  entries?: readonly DatedEntry[];
 }): Promise<void> {
   await cancelByKind(KIND_SERVICE);
   if (!params.enabled) return;
   if (!(await hasNotificationPermission())) return;
 
   const { stats, vehicleName } = params;
-  const kmPerDay =
-    stats && stats.avgDaysBetweenFills > 0 ? stats.avgKmBetweenFills / stats.avgDaysBetweenFills : 0;
+  const kmPerDay = deriveKmPerDay(stats, params.entries);
 
   for (const r of params.reminders) {
     const label = serviceTypeLabel(r.type);
