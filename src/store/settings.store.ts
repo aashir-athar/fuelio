@@ -12,6 +12,8 @@ interface SettingsState {
     volumeUnit: VolumeUnit;
     currency: Currency;
     notificationsEnabled: boolean;
+    /** Opt-in: watch location to offer a fuel-log prompt at petrol stations. Off by default. */
+    locationPromptEnabled: boolean;
     activeVehicleId: string | null;
 
     completeOnboarding: () => void;
@@ -20,6 +22,7 @@ interface SettingsState {
     setVolumeUnit: (u: VolumeUnit) => void;
     setCurrency: (c: Currency) => void;
     setNotificationsEnabled: (v: boolean) => void;
+    setLocationPromptEnabled: (v: boolean) => void;
     setActiveVehicleId: (id: string | null) => void;
     reset: () => void;
 }
@@ -31,6 +34,7 @@ const DEFAULTS = {
     volumeUnit: 'liter' as VolumeUnit,
     currency: 'USD' as Currency,
     notificationsEnabled: true,
+    locationPromptEnabled: false,
     activeVehicleId: null,
 };
 
@@ -44,6 +48,7 @@ export const useSettingsStore = create<SettingsState>()(
             setVolumeUnit: (u) => set({ volumeUnit: u }),
             setCurrency: (c) => set({ currency: c }),
             setNotificationsEnabled: (v) => set({ notificationsEnabled: v }),
+            setLocationPromptEnabled: (v) => set({ locationPromptEnabled: v }),
             setActiveVehicleId: (id) => set({ activeVehicleId: id }),
             reset: () => set(DEFAULTS),
         }),

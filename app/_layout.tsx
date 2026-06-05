@@ -1,4 +1,6 @@
+import '@/src/services/locationTask'; // registers the background station-watch task (must load at startup)
 import { useServiceNotifications } from '@/src/hooks/useServiceNotifications';
+import { resumeStationDetection } from '@/src/services/location';
 import { configureNotificationHandler } from '@/src/services/notifications';
 import { useStoreHydration } from '@/src/store/hydration';
 import { useSettingsStore } from '@/src/store/settings.store';
@@ -24,9 +26,16 @@ function RootNav() {
   const segments = useSegments();
   const hasOnboarded = useSettingsStore((s) => s.hasCompletedOnboarding);
   const vehicleCount = useVehicleStore((s) => s.vehicles.length);
+  const locationEnabled = useSettingsStore((s) => s.locationPromptEnabled);
 
   // Keep OS-scheduled service reminders in sync with the data.
   useServiceNotifications();
+
+  // Resume the opt-in station watch if the user enabled it previously (no prompt).
+  useEffect(() => {
+    if (!hydrated || !locationEnabled) return;
+    resumeStationDetection().catch(() => {});
+  }, [hydrated, locationEnabled]);
 
   useEffect(() => {
     if (!hydrated) return;

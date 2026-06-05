@@ -3,6 +3,7 @@ import { SectionHeader } from '@/src/components/primitives/SectionHeader';
 import { SegmentedControl } from '@/src/components/primitives/SegmentedControl';
 import { Text } from '@/src/components/primitives/Text';
 import { useHaptics } from '@/src/hooks/useHaptics';
+import { disableStationDetection, enableStationDetection } from '@/src/services/location';
 import { requestNotificationPermission } from '@/src/services/notifications';
 import { useFuelStore } from '@/src/store/fuel.store';
 import { useServiceStore } from '@/src/store/service.store';
@@ -125,6 +126,8 @@ export default function SettingsModal() {
     const setCurrency = useSettingsStore((s) => s.setCurrency);
     const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
     const setNotificationsEnabled = useSettingsStore((s) => s.setNotificationsEnabled);
+    const locationPromptEnabled = useSettingsStore((s) => s.locationPromptEnabled);
+    const setLocationPromptEnabled = useSettingsStore((s) => s.setLocationPromptEnabled);
     const resetSettings = useSettingsStore((s) => s.reset);
 
     const resetVehicles = useVehicleStore((s) => s.reset);
@@ -176,6 +179,25 @@ export default function SettingsModal() {
             setNotificationsEnabled(value);
         },
         [setNotificationsEnabled],
+    );
+
+    const onToggleLocation = useCallback(
+        async (value: boolean) => {
+            if (value) {
+                const ok = await enableStationDetection();
+                if (!ok) {
+                    Alert.alert(
+                        'Location needed',
+                        'To offer a fuel-log prompt when you stop at a station, allow Fuelio to use your location (including in the background) in your device settings. This is optional and off by default.',
+                    );
+                    return;
+                }
+            } else {
+                await disableStationDetection();
+            }
+            setLocationPromptEnabled(value);
+        },
+        [setLocationPromptEnabled],
     );
 
     return (
@@ -302,6 +324,19 @@ export default function SettingsModal() {
                             <Switch
                                 value={notificationsEnabled}
                                 onValueChange={onToggleNotifications}
+                                trackColor={{ true: colors.accent, false: colors.divider }}
+                                thumbColor={colors.surface}
+                            />
+                        }
+                    />
+                    <Divider />
+                    <Row
+                        icon="location-outline"
+                        label="Fuel-up prompts at stations"
+                        right={
+                            <Switch
+                                value={locationPromptEnabled}
+                                onValueChange={onToggleLocation}
                                 trackColor={{ true: colors.accent, false: colors.divider }}
                                 thumbColor={colors.surface}
                             />

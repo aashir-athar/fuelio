@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ensureAndroidChannels, rescheduleServiceReminders } from '../services/notifications';
+import { ensureAndroidChannels, requestNotificationPermission, rescheduleServiceReminders } from '../services/notifications';
 import { useSettingsStore } from '../store/settings.store';
 import { useActiveVehicle } from './useActiveVehicle';
 import { useServiceReminders } from './useServiceReminders';
@@ -21,6 +21,12 @@ export function useServiceNotifications(): void {
     (async () => {
       await ensureAndroidChannels();
       if (!active) return;
+      // Ask for permission only when reminders actually exist (a relevant moment,
+      // e.g. right after logging a service) — prompts at most once.
+      if (enabled && reminders.length > 0) {
+        await requestNotificationPermission();
+        if (!active) return;
+      }
       await rescheduleServiceReminders({
         enabled,
         vehicleName: vehicle?.nickname ?? 'Your vehicle',
