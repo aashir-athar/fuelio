@@ -360,12 +360,15 @@ export default function SettingsModal() {
                         Drive smarter. Spend less. Maintain better.
                     </Text>
                     <View style={{ height: 1, backgroundColor: colors.divider, marginVertical: space[4] }} />
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-                        <Ionicons name="shield-checkmark-outline" size={15} color={colors.textMuted} />
-                        <Text variant="caption" tone="muted">
-                            Version 1.0.0 · 100% offline · No ads · No tracking
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[2] }}>
+                        <Ionicons name="shield-checkmark-outline" size={15} color={colors.textMuted} style={{ marginTop: 2 }} />
+                        <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+                            Private by design. No ads, no accounts, no analytics. Optional location and reminders stay on your device.
                         </Text>
                     </View>
+                    <Text variant="caption" tone="muted" style={{ marginTop: space[2] }}>
+                        Fuelio v1.0.0
+                    </Text>
                 </Card>
             </ScrollView>
         </View>

@@ -27,22 +27,22 @@ const SLIDES = [
     {
         image: IMAGES.onboarding,
         title: 'Welcome to Fuelio',
-        body: 'Your car’s best friend. Offline, private, and always by your side.',
+        body: 'Every fill-up and service in one calm place. Your data stays on your phone.',
     },
     {
         image: IMAGES.fueling,
-        title: 'Log fuel in 5 seconds',
-        body: 'Liters, price, odometer — done. We handle the math with a best-in-class algorithm.',
+        title: 'Log a fill in five seconds',
+        body: 'Volume, price, odometer. Fuelio does the rest with a fleet-grade economy algorithm.',
     },
     {
         image: IMAGES.oilChange,
         title: 'Never miss an oil change',
-        body: 'Smart reminders for every service. Stay ahead, save on repairs.',
+        body: 'Reminders that reach you on time, so small jobs never turn into big bills.',
     },
     {
         image: IMAGES.analysis,
-        title: 'See your savings in perfect graphs',
-        body: 'Daily, monthly, yearly trends — know exactly where your money goes.',
+        title: 'See your real numbers',
+        body: 'Economy, spend, and emissions across weeks and years. Know exactly where your money goes.',
     },
 ] as const;
 
