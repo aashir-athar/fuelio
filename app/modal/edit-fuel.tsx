@@ -29,13 +29,6 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } fr
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const TANK_LEVELS = [
-    { label: '¼', value: 0.25 },
-    { label: '½', value: 0.5 },
-    { label: '¾', value: 0.75 },
-    { label: 'Full', value: 1 },
-] as const;
-
 export default function EditFuelModal() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -56,7 +49,6 @@ export default function EditFuelModal() {
     const [price, setPrice] = useState(entry ? String(+pricePerLitreToDisplay(entry.pricePerLiter, volumeUnit).toFixed(3)) : '');
     const [odometer, setOdometer] = useState(entry ? String(Math.round(kmToDisplay(entry.odometer, distanceUnit))) : '');
     const [fullTank, setFullTank] = useState(entry?.fullTank ?? true);
-    const [tankLevel, setTankLevel] = useState<number | null>(entry?.tankLevelAfter ?? null);
     const [notes, setNotes] = useState(entry?.notes ?? '');
 
     if (!entry) {
@@ -92,7 +84,6 @@ export default function EditFuelModal() {
                 ? displayToKm(parsedOdometer, distanceUnit)
                 : entry.odometer,
             fullTank,
-            tankLevelAfter: !fullTank && tankLevel != null ? tankLevel : undefined,
             notes: notes.trim() || undefined,
         });
         haptic('success');
@@ -165,7 +156,7 @@ export default function EditFuelModal() {
                         <Text
                             numberOfLines={1}
                             adjustsFontSizeToFit
-                            style={{ fontFamily: fontFamily.display, fontSize: 56, lineHeight: 60, letterSpacing: -1.6, color: colors.textOnAccent, marginTop: space[2] }}
+                            style={{ fontFamily: fontFamily.display, fontSize: 56, lineHeight: 72, letterSpacing: -1.6, color: colors.textOnAccent, marginTop: space[2] }}
                         >
                             {totalStr}
                         </Text>
@@ -178,22 +169,6 @@ export default function EditFuelModal() {
                         <Chip label="Full tank" selected={fullTank} onPress={() => setFullTank(true)} />
                         <Chip label="Partial" selected={!fullTank} onPress={() => setFullTank(false)} />
                     </View>
-                    {fullTank ? null : (
-                        <View style={{ gap: space[3], marginTop: space[1] }}>
-                            <Text variant="label" tone="secondary">TANK LEVEL NOW (OPTIONAL)</Text>
-                            <View style={{ flexDirection: 'row', gap: space[2] }}>
-                                {TANK_LEVELS.map((l) => (
-                                    <Chip
-                                        key={l.value}
-                                        label={l.label}
-                                        selected={tankLevel === l.value}
-                                        onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
-                                        style={{ flex: 1, alignItems: 'center' }}
-                                    />
-                                ))}
-                            </View>
-                        </View>
-                    )}
                 </Animated.View>
 
                 <Animated.View entering={enter(180)}>

@@ -8,7 +8,7 @@ import { IMAGES } from '@/src/constants/images';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { accentGlow, duration, fontFamily, radius, space, spring } from '@/src/theme/tokens';
+import { accentGlow, duration, radius, space, spring } from '@/src/theme/tokens';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -113,14 +113,7 @@ export default function WelcomeScreen() {
             <View style={{ paddingHorizontal: space[6], gap: space[4] }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-                        <View
-                            style={[
-                                { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-                                accentGlow(colors.accent),
-                            ]}
-                        >
-                            <Text style={{ fontFamily: fontFamily.display, fontSize: 18, lineHeight: 22, color: colors.textOnAccent }}>F</Text>
-                        </View>
+                        <Image source={IMAGES.icon} style={{ width: 34, height: 34, borderRadius: radius.sm }} contentFit="contain" />
                         <Text variant="label" weight="semibold">FUELIO</Text>
                     </View>
 

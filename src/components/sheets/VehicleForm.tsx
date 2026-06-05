@@ -37,9 +37,11 @@ interface Props {
     onDone: () => void;
     submitLabel?: string;
     footerSlot?: React.ReactNode;
+    /** When false, the form's own avatar+title header is hidden (the host screen provides one). */
+    showHeader?: boolean;
 }
 
-export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicle', footerSlot }: Props) {
+export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicle', footerSlot, showHeader = true }: Props) {
     const reduceMotion = useReduceMotion();
     const addVehicle = useVehicleStore((s) => s.addVehicle);
     const updateVehicle = useVehicleStore((s) => s.updateVehicle);
@@ -93,18 +95,20 @@ export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicl
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
         >
-            <Animated.View entering={enter(0)} style={{ alignItems: 'center', marginBottom: space[2] }}>
-                <Avatar source={IMAGES.addVehicle} size={148} tinted={false} />
-                <Text variant="micro" tone="secondary" style={{ marginTop: space[4] }}>
-                    {initialVehicle ? 'EDIT VEHICLE' : 'NEW VEHICLE'}
-                </Text>
-                <Text variant="display" style={{ marginTop: space[1], textAlign: 'center' }}>
-                    {initialVehicle ? 'Your ride' : 'Add a ride'}
-                </Text>
-                <Text variant="body" tone="secondary" style={{ textAlign: 'center', marginTop: space[2], maxWidth: 300 }}>
-                    We use this to compute accurate fuel economy and service reminders.
-                </Text>
-            </Animated.View>
+            {showHeader ? (
+                <Animated.View entering={enter(0)} style={{ alignItems: 'center', marginBottom: space[2] }}>
+                    <Avatar source={IMAGES.addVehicle} size={148} tinted={false} />
+                    <Text variant="micro" tone="secondary" style={{ marginTop: space[4] }}>
+                        {initialVehicle ? 'EDIT VEHICLE' : 'NEW VEHICLE'}
+                    </Text>
+                    <Text variant="display" style={{ marginTop: space[1], textAlign: 'center' }}>
+                        {initialVehicle ? 'Your ride' : 'Add a ride'}
+                    </Text>
+                    <Text variant="body" tone="secondary" style={{ textAlign: 'center', marginTop: space[2], maxWidth: 300 }}>
+                        We use this to compute accurate fuel economy and service reminders.
+                    </Text>
+                </Animated.View>
+            ) : null}
 
             <Animated.View entering={enter(60)} style={{ gap: space[4] }}>
                 <Input label="Nickname" placeholder="My Civic" value={nickname} onChangeText={setNickname} />

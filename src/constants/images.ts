@@ -8,4 +8,5 @@ export const IMAGES = {
   analysis: require('../../assets/images/analysis.png'),
   addVehicle: require('../../assets/images/add-vehicle.png'),
   carMaintenance: require('../../assets/images/car-maintainance.png'),
+  icon: require('../../assets/images/icon.png'),
 } as const;

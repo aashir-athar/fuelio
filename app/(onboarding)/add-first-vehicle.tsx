@@ -6,7 +6,7 @@ import { VehicleForm } from '@/src/components/sheets/VehicleForm';
 import { IMAGES } from '@/src/constants/images';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { accentGlow, duration, fontFamily, radius, space } from '@/src/theme/tokens';
+import { accentGlow, duration, radius, space } from '@/src/theme/tokens';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
@@ -31,14 +31,7 @@ export default function AddFirstVehicleScreen() {
             <View style={{ paddingHorizontal: space[6], gap: space[4] }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-                        <View
-                            style={[
-                                { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-                                accentGlow(colors.accent),
-                            ]}
-                        >
-                            <Text style={{ fontFamily: fontFamily.display, fontSize: 18, lineHeight: 22, color: colors.textOnAccent }}>F</Text>
-                        </View>
+                        <Image source={IMAGES.icon} style={{ width: 34, height: 34, borderRadius: radius.sm }} contentFit="contain" />
                         <Text variant="label" weight="semibold">FUELIO</Text>
                     </View>
 
@@ -87,7 +80,7 @@ export default function AddFirstVehicleScreen() {
             </Animated.View>
 
             <Animated.View entering={enter(160)} style={{ flex: 1 }}>
-                <VehicleForm submitLabel="Start tracking" onDone={onDone} />
+                <VehicleForm submitLabel="Start tracking" onDone={onDone} showHeader={false} />
             </Animated.View>
         </View>
     );

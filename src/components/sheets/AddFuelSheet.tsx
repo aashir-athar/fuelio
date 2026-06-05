@@ -31,14 +31,6 @@ interface Props {
     onClose: () => void;
 }
 
-/** Fuel-gauge marks for the optional "tank level after a partial fill" input. */
-const TANK_LEVELS = [
-    { label: '¼', value: 0.25 },
-    { label: '½', value: 0.5 },
-    { label: '¾', value: 0.75 },
-    { label: 'Full', value: 1 },
-] as const;
-
 export function AddFuelSheet({ visible, onClose }: Props) {
     const { colors } = useTheme();
     const reduceMotion = useReduceMotion();
@@ -55,7 +47,6 @@ export function AddFuelSheet({ visible, onClose }: Props) {
     const [price, setPrice] = useState('');
     const [odometer, setOdometer] = useState(seedOdometer);
     const [fullTank, setFullTank] = useState(true);
-    const [tankLevel, setTankLevel] = useState<number | null>(null);
     const [notes, setNotes] = useState('');
 
     const litersNum = parseFloat(liters) || 0;
@@ -83,14 +74,12 @@ export function AddFuelSheet({ visible, onClose }: Props) {
             pricePerLiter: displayToPricePerLitre(priceNum, volumeUnit),
             odometer: displayToKm(odoNum, distanceUnit),
             fullTank,
-            tankLevelAfter: !fullTank && tankLevel != null ? tankLevel : undefined,
             notes: notes.trim() || undefined,
         });
         haptic('success');
         setLiters('');
         setPrice('');
         setNotes('');
-        setTankLevel(null);
         onClose();
     };
 
@@ -158,7 +147,7 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                         <Text
                             numberOfLines={1}
                             adjustsFontSizeToFit
-                            style={{ fontFamily: fontFamily.display, fontSize: 60, lineHeight: 64, letterSpacing: -1.6, color: colors.textOnAccent, marginTop: space[2] }}
+                            style={{ fontFamily: fontFamily.display, fontSize: 60, lineHeight: 76, letterSpacing: -1.6, color: colors.textOnAccent, marginTop: space[2] }}
                         >
                             {totalStr}
                         </Text>
@@ -174,25 +163,9 @@ export function AddFuelSheet({ visible, onClose }: Props) {
                     </View>
                     <Text variant="caption" tone="muted">
                         {fullTank
-                            ? 'Filled to the top. This is what measures your real economy.'
-                            : 'Set the tank level after filling for an exact reading, or leave it and it rolls into your next full tank.'}
+                            ? 'Filled to the top. Full tanks are what measure your real economy.'
+                            : 'Partial fill — it rolls into your next full tank. Your overall economy is still tracked from distance driven and litres added.'}
                     </Text>
-                    {fullTank ? null : (
-                        <View style={{ gap: space[3], marginTop: space[1] }}>
-                            <Text variant="label" tone="secondary">TANK LEVEL NOW (OPTIONAL)</Text>
-                            <View style={{ flexDirection: 'row', gap: space[2] }}>
-                                {TANK_LEVELS.map((l) => (
-                                    <Chip
-                                        key={l.value}
-                                        label={l.label}
-                                        selected={tankLevel === l.value}
-                                        onPress={() => setTankLevel(tankLevel === l.value ? null : l.value)}
-                                        style={{ flex: 1, alignItems: 'center' }}
-                                    />
-                                ))}
-                            </View>
-                        </View>
-                    )}
                 </Animated.View>
 
                 <Animated.View entering={enter(240)}>

@@ -102,8 +102,10 @@ export const FuelEntryRow = React.memo(function FuelEntryRow({ entry, onPress }:
                     }}
                 >
                     <Text
-                        style={{ fontFamily: fontFamily.display, fontSize: 22, lineHeight: 24, letterSpacing: -0.5, color: colors.accent }}
+                        style={{ fontFamily: fontFamily.display, fontSize: 22, lineHeight: 28, letterSpacing: -0.5, color: colors.accent }}
                         numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.6}
                     >
                         {volumeValue}
                     </Text>
@@ -136,8 +138,10 @@ export const FuelEntryRow = React.memo(function FuelEntryRow({ entry, onPress }:
 
                 <View style={{ alignItems: 'flex-end' }}>
                     <Text
-                        style={{ fontFamily: fontFamily.display, fontSize: 24, lineHeight: 26, letterSpacing: -0.5, color: economyColor }}
+                        style={{ fontFamily: fontFamily.display, fontSize: 24, lineHeight: 30, letterSpacing: -0.5, color: economyColor }}
                         numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.6}
                     >
                         {economyValue}
                     </Text>

@@ -205,7 +205,7 @@ export function AddServiceSheet({ visible, onClose }: Props) {
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2], marginTop: space[2] }}>
                 <Text
                   numberOfLines={1}
-                  style={{ fontFamily: fontFamily.display, fontSize: 48, lineHeight: 52, letterSpacing: -1.2, color: colors.textOnAccent }}
+                  style={{ fontFamily: fontFamily.display, fontSize: 48, lineHeight: 60, letterSpacing: -1.2, color: colors.textOnAccent }}
                 >
                   {nextDueNumber}
                 </Text>

@@ -46,11 +46,11 @@ export const Text = React.memo(function Text({
     const variantStyle: TextStyle = (() => {
         switch (variant) {
             case 'display':
-                return { fontFamily: fontFamily.display, fontSize: font.size.display, letterSpacing: -1.5, lineHeight: font.size.display * 1.02 };
+                return { fontFamily: fontFamily.display, fontSize: font.size.display, letterSpacing: -1.5, lineHeight: Math.round(font.size.display * 1.24) };
             case 'title':
-                return { fontFamily: fontFamily.display, fontSize: font.size.xxl, letterSpacing: -0.8, lineHeight: font.size.xxl * 1.06 };
+                return { fontFamily: fontFamily.display, fontSize: font.size.xxl, letterSpacing: -0.8, lineHeight: Math.round(font.size.xxl * 1.24) };
             case 'heading':
-                return { fontFamily: fontFamily.display, fontSize: font.size.xl, letterSpacing: -0.4, lineHeight: font.size.xl * 1.12 };
+                return { fontFamily: fontFamily.display, fontSize: font.size.xl, letterSpacing: -0.4, lineHeight: Math.round(font.size.xl * 1.24) };
             case 'bodyLg':
                 return { fontFamily: fontFamily.regular, fontSize: font.size.md, lineHeight: 25 };
             case 'body':

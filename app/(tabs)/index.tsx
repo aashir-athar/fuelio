@@ -110,7 +110,7 @@ export default function HomeScreen() {
               ) : null}
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2], marginTop: space[3] }}>
-              <Text style={{ fontFamily: fontFamily.display, fontSize: 72, lineHeight: 74, letterSpacing: -2, color: colors.textOnAccent }}>
+              <Text numberOfLines={1} style={{ fontFamily: fontFamily.display, fontSize: 72, lineHeight: 90, letterSpacing: -2, color: colors.textOnAccent }}>
                 {effNumber}
               </Text>
               <Text variant="bodyLg" tone="onAccent" weight="semibold" style={{ marginBottom: space[3], opacity: 0.8 }}>
@@ -203,7 +203,7 @@ const StatCol = React.memo(function StatCol({ label, value, accent, colors }: { 
       {value === null ? (
         <Skeleton width="70%" height={20} style={{ marginTop: space[2] }} />
       ) : (
-        <Text variant="heading" tone={accent ? 'accent' : 'primary'} numberOfLines={1} style={{ marginTop: space[1] }}>{value}</Text>
+        <Text variant="heading" tone={accent ? 'accent' : 'primary'} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ marginTop: space[1], fontSize: 20, lineHeight: 26 }}>{value}</Text>
       )}
     </View>
   );

@@ -82,7 +82,7 @@ export default function FuelScreen() {
                     style={{
                         fontFamily: fontFamily.display,
                         fontSize: 64,
-                        lineHeight: 66,
+                        lineHeight: 80,
                         letterSpacing: -2,
                         color: colors.textPrimary,
                         marginTop: space[1],
@@ -147,7 +147,7 @@ export default function FuelScreen() {
                     style={{
                         flex: 1,
                         paddingHorizontal: space[5],
-                        paddingBottom: insets.bottom + 120,
+                        paddingBottom: insets.bottom + 140,
                     }}
                 >
                     {header}
@@ -169,7 +169,7 @@ export default function FuelScreen() {
                     ListHeaderComponent={header}
                     contentContainerStyle={{
                         paddingHorizontal: space[5],
-                        paddingBottom: insets.bottom + 120,
+                        paddingBottom: insets.bottom + 140,
                     }}
                     ItemSeparatorComponent={ItemSeparator}
                     showsVerticalScrollIndicator={false}
@@ -230,7 +230,9 @@ const SummaryStat = React.memo(function SummaryStat({ label, value, tone = 'prim
                 variant="heading"
                 tone={tone === 'accent' ? 'accent' : 'primary'}
                 numberOfLines={1}
-                style={{ marginTop: space[2] }}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
+                style={{ marginTop: space[2], fontSize: 20, lineHeight: 26 }}
             >
                 {value}
             </Text>

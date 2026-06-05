@@ -121,8 +121,7 @@ export function computeEntries(
     const computed: ComputedFuelEntry[] = [];
 
     // Forward window accumulator.
-    let anchorOdo: number | null = null; // odometer of the last measurement anchor
-    let anchorLevel = 0;                  // tank level (L) just after that anchor
+    let anchorOdo: number | null = null; // odometer of the last full-tank anchor
     let carryFuel = 0;                    // banked partial-fill litres since the anchor
 
     for (let i = 0; i < vehicleEntries.length; i++) {
@@ -143,19 +142,16 @@ export function computeEntries(
             anomalies.push('overfill'); // 5% tolerance for pump rounding
         }
 
-        // ── Window economy (full-to-full, generalized to known tank levels) ──
-        // A fill is a measurement ANCHOR when we know the tank level just after it:
-        // a full fill (level = capacity) OR a partial fill with a recorded
-        // tankLevelAfter. Between two anchors the economy is EXACT, because the level
-        // drop plus the fuel added across the window equals the fuel burned. A full
-        // fill is just the special case level = capacity.
-        const hasLevel = entry.tankLevelAfter != null && tankCapacity > 0;
-        const isAnchor = !isEV && (entry.fullTank || hasLevel);
-        const levelAfter = entry.fullTank
-            ? tankCapacity
-            : hasLevel
-                ? Math.min(tankCapacity, Math.max(0, entry.tankLevelAfter! * tankCapacity))
-                : 0;
+        // ── Window economy (full-tank to full-tank) ──────────────────────────
+        // A FULL fill is the ONLY measurement anchor: filled to the top, the tank
+        // level is known to be exactly the capacity WITHOUT trusting a fuel gauge
+        // (which can be inaccurate). Between two full fills the fuel burned equals
+        // the fuel added in between — the banked partial fills plus this fill — so
+        // economy = distance / burned, with no gauge reading anywhere in the math.
+        // Partial fills simply bank their litres until the next full tank closes a
+        // window. (Economy for partial-only logs is handled by estimatePartialEconomy,
+        // purely from odometer distance and litres.)
+        const isAnchor = !isEV && entry.fullTank;
 
         let efficiency = 0;
         let isValid = false;
@@ -166,10 +162,8 @@ export function computeEntries(
         if (!isEV) {
             if (isAnchor) {
                 if (anchorOdo !== null) {
-                    // burned = (level at last anchor − level now) + fuel added across the
-                    // window. For full→full this reduces to (banked partials + this fill).
-                    const addedInWindow = carryFuel + entry.liters;
-                    windowFuel = anchorLevel - levelAfter + addedInWindow;
+                    // burned = banked partial fills + this full fill, across the window.
+                    windowFuel = carryFuel + entry.liters;
                     windowDistance = entry.odometer - anchorOdo;
                     if (windowFuel > 0 && windowDistance > 0) {
                         efficiency = windowDistance / windowFuel;
@@ -180,13 +174,12 @@ export function computeEntries(
                         }
                     }
                 }
-                // This anchor opens the next window; the fuel just added belonged to the
-                // window that just closed, so the next window starts empty.
+                // This full fill opens the next window; the fuel just added belonged to
+                // the window that just closed, so the next window starts empty.
                 anchorOdo = entry.odometer;
-                anchorLevel = levelAfter;
                 carryFuel = 0;
             } else {
-                // Partial fill with no known level: bank its fuel for the next anchor.
+                // Partial fill: bank its fuel for the next full-tank anchor.
                 // (Fills before the first anchor are pre-baseline and get discarded when
                 // that first anchor resets the accumulator — they can't be measured.)
                 carryFuel += entry.liters;
