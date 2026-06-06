@@ -46,9 +46,20 @@
 
 <br/>
 
-## 🆕 What's New in v2.0
+## 🆕 What's New
 
-Fuelio v2 is a ground-up upgrade across the algorithm, the runtime, and the experience.
+### v2.1 — the "Pilo" design pass
+
+A bold visual redesign on the **exact same colors and icons**, then hardened by a multi-perspective whole-app review.
+
+- **Bold dark + lime design language** — lime-fill economy **hero cards**, charcoal **divided stat cards**, pill chips, and a floating tab bar with a **solid lime active circle**. Lime is a hero, not a garnish.
+- **New type system** — **Manjari** rounded display + **Inter** body; big, confident numbers and tiny uppercase micro-labels.
+- **Partial-tank economy, done honestly** — drivers who never brim the tank now get a **capacity-bounded estimate** straight from odometer distance ÷ litres (a real fuel gauge can read wrong, so it is never trusted). The estimate **tightens as you drive**.
+- **Robustness pass** — persisted-store `migrate` seams, corrupt-blob backup, title-cased vehicle names, debounced reminders, and geofence **dwell detection** that ignores drive-bys.
+
+### v2.0 — the engine
+
+Fuelio v2 was a ground-up upgrade across the algorithm, the runtime, and the experience.
 
 | Area | v1 | v2.0 |
 |:---|:---|:---|
@@ -56,7 +67,7 @@ Fuelio v2 is a ground-up upgrade across the algorithm, the runtime, and the expe
 | **Language** | TypeScript 5.9 | **TypeScript 6** |
 | **Animation** | Reanimated 4.1 | **Reanimated 4.3 + Worklets** |
 | **Build** | New Architecture | **New Architecture · React Compiler · typed routes** |
-| **Fuel math** | full-tank window (v2 algorithm) | **Algorithm v3** — distance-weighted, odometer-sorted, anomaly-aware, EV-safe (13-case test harness) |
+| **Fuel math** | full-tank window (v2 algorithm) | **Algorithm v3** — distance-weighted, odometer-sorted, anomaly-aware, EV-safe (18-case test harness) |
 | **Storage** | mixed units | **Canonical units** — km, litres, price/litre stored; converted only at the UI edge |
 | **Reminders** | in-app cards | **OS-scheduled local notifications** that fire even when the app is killed |
 | **Logging** | manual only | **Optional station detection** — offer to log a fill when you stop at a pump |
@@ -94,7 +105,7 @@ Log volume, price, odometer, full vs partial tank, and optional notes. The odome
 <td width="50%" valign="top">
 
 ### 📊 &nbsp;Analytics
-Average, best, and worst economy per vehicle. Total distance, fuel, cost, and cost-per-km. **Line chart** for economy over time, **bar chart** for monthly spend, and an automatic improving / stable / declining trend. Time filters: Week · Month · Year · All time.
+Average, best, and worst economy per vehicle. Total distance, fuel, cost, and cost-per-km. **Line chart** for economy over time, **bar chart** for monthly spend, and an automatic improving / stable / declining trend (shown only once there are enough measured tanks to be honest). Partial-only drivers still get an **estimated economy** with a confidence band. Time filters: Week · Month · Year · All time.
 
 <br/>
 
@@ -177,7 +188,7 @@ flowchart TD
 
 ## ⚗️ The Fuel Algorithm
 
-> `src/utils/fuelAlgorithm.ts` · validated by a 13-case Node test harness (`npm test`)
+> `src/utils/fuelAlgorithm.ts` · validated by a 18-case Node test harness (`npm test`)
 
 **Why naive math breaks.** Dividing litres by distance gives a wrong number the moment a partial fill is logged: a 20 L top-up followed by a 40 L fill produces two meaningless economy readings.
 
@@ -212,6 +223,10 @@ Each measured window is scored against the **vehicle's own** history. With 4+ sa
 | 🟡 | **Average** | within −5% … +2% |
 | 🔴 | **Poor** | > 5% below |
 
+### Partial-tank economy — an honest estimate
+
+Some drivers never brim the tank, so they never close a full-to-full window. Rather than show nothing, Fuelio computes a **capacity-bounded estimate** purely from **odometer distance ÷ litres added** — no fuel-gauge reading is ever trusted (a gauge can read wrong). From the fuel-balance identity `burned = fuelAdded + (startLevel − endLevel)`, with each unknown endpoint level bounded by the tank capacity, the economy is a provable **interval that tightens as distance grows** — and the bounds are **clamped to physically plausible limits** so the range can never blow up. The Home hero surfaces the central estimate with a `low / moderate / high` confidence chip once there is enough distance to be meaningful.
+
 <br/>
 
 ---
@@ -231,6 +246,7 @@ Each measured window is scored against the **vehicle's own** history. With 4+ sa
 | **Gestures** | [Gesture Handler](https://docs.swmansion.com/react-native-gesture-handler/) | `~2.31.1` |
 | **Lists** | [@shopify/flash-list](https://shopify.github.io/flash-list/) | `2.0.2` |
 | **Splash** | [lottie-react-native](https://github.com/lottie-react-native/lottie-react-native) | `~7.3.4` |
+| **Fonts** | [@expo-google-fonts](https://github.com/expo/google-fonts) — Manjari · Inter | latest |
 | **Notifications** | [expo-notifications](https://docs.expo.dev/versions/latest/sdk/notifications/) | `~56.0.15` |
 | **Location** | [expo-location](https://docs.expo.dev/versions/latest/sdk/location/) + [expo-task-manager](https://docs.expo.dev/versions/latest/sdk/task-manager/) | `~56.0.15` |
 | **State** | [Zustand](https://zustand-demo.pmnd.rs) | `^5.0.12` |
@@ -245,6 +261,17 @@ Each measured window is scored against the **vehicle's own** history. With 4+ sa
 <br/>
 
 ## 🎨 Design System
+
+Fuelio speaks one bold, calm visual language: a **near-black OLED canvas** with **electric lime** used as a hero — full lime-fill cards for the number that matters, charcoal divided stat cards for the rest, pill chips, and a floating tab bar whose active tab is a **solid lime circle**.
+
+### Typography
+
+| Role | Family | Feel |
+|:---|:---|:---|
+| Display · titles · big numbers | **Manjari** | rounded · geometric · confident |
+| Body · labels · captions | **Inter** | clean · legible at small sizes |
+
+Loaded via `@expo-google-fonts` behind the hydration gate, so the first paint is always correct.
 
 ### Brand Colors
 
@@ -282,6 +309,8 @@ All motion respects the system **Reduce Motion** setting through `useReduceMotio
 
 `micro` · `caption` · `label` · `body` · `bodyLg` · `heading` · `title` · `display`
 
+Display variants (`display` · `title` · `heading`) render in **Manjari**; body and label variants in **Inter**.
+
 Tone props: `primary` · `secondary` · `muted` · `accent` · `onAccent` · `danger`
 
 <br/>
@@ -304,7 +333,7 @@ Stores hold the canonical truth. The pure `fuelAlgorithm.ts` derives every econo
 
 `src/services/notifications.ts` schedules **local** notifications that the OS fires even when the app is fully killed — no server, no push token.
 
-- **Service reminders are mileage-based**, so Fuelio estimates the calendar date the vehicle will reach the due odometer from its own km/day rate (`avgKmBetweenFills / avgDaysBetweenFills`) and schedules a dated trigger, nudging a few days early. Reminders are cancelled and rescheduled whenever the data changes, so edits never pile up duplicates.
+- **Service reminders are mileage-based**, so Fuelio estimates the calendar date the vehicle will reach the due odometer from its own km/day rate — derived from total distance over the real calendar span — and schedules a dated trigger, nudging a few days early. Rescheduling is debounced and keyed on a stable signature, so a burst of edits never piles up duplicate alerts.
 - Android channels are created up front (8.0+ drops notifications without them).
 
 ### Opt-in station detection
@@ -500,7 +529,7 @@ Once a dev build is installed on your device, start the bundler with `npm start`
 ```bash
 npm run typecheck    # tsc --noEmit (strict)
 npm run lint         # expo lint
-npm test             # node --test — the 13-case fuel-algorithm harness
+npm test             # node --test — the 18-case fuel-algorithm harness
 npx expo-doctor      # dependency + config health check
 ```
 
@@ -529,7 +558,7 @@ eas submit -p android --latest
 ```
 
 Notes:
-- `app.json` already sets `version: "2.0.0"`, the package `com.iamaashirathar.fuelio`, and the notification + location plugins.
+- `app.json` sets the package `com.iamaashirathar.fuelio` and the notification + location plugins.
 - `eas.json` uses `appVersionSource: "remote"`, so EAS owns the build/version numbers; the `production` profile auto-increments.
 - Builds take roughly **10–15 minutes**; EAS prints a download URL and QR code when done.
 
@@ -570,7 +599,7 @@ With the **full-to-full window method** ([details](#-the-fuel-algorithm)). Econo
 <details>
 <summary><strong>Why do partial fills not show their own km/L?</strong></summary>
 
-Because there is no honest way to measure economy across a partial fill — the tank level is unknown. The fuel is banked and counted in the next full-tank window instead, so it is attributed exactly once.
+Because there is no honest way to measure economy across a single partial fill — the tank level is unknown. The fuel is banked and counted in the next full-tank window instead, so it is attributed exactly once. If you **never** brim the tank, Fuelio still shows a **capacity-bounded estimate** from your odometer distance and litres, with a confidence band that tightens the more you drive.
 </details>
 
 <details>
@@ -630,7 +659,7 @@ Fuelio is open to contributions of every size — bug fixes, docs, translations,
 ### How to contribute
 
 1. **Fork** the [repository](https://github.com/aashir-athar/fuelio)
-2. **Branch** off `main` — `git checkout -b feature/my-feature`
+2. **Branch** off `master` — `git checkout -b feature/my-feature`
 3. **Follow the conventions:**
    - All colors via `useTheme()` — no hardcoded hex in components
    - All spacing via `space[n]` tokens — no hardcoded pixels
