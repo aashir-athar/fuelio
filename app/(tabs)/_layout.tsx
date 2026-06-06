@@ -1,19 +1,12 @@
 import { useTheme } from '@/src/theme/ThemeProvider';
+import { accentGlow, radius, space } from '@/src/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import React from 'react';
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { Platform, Pressable, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ─── Icon map (same icons, unchanged) ────────────────────────────────────────
 type TabKey = 'home' | 'fuel' | 'service' | 'analytics' | 'garage';
 
 const ICON_MAP: Record<TabKey, { ios: string; android: keyof typeof Ionicons.glyphMap }> = {
@@ -27,19 +20,11 @@ const ICON_MAP: Record<TabKey, { ios: string; android: keyof typeof Ionicons.gly
 function TabIcon({ name, color, focused }: { name: TabKey; color: string; focused: boolean }) {
   const map = ICON_MAP[name];
   if (Platform.OS === 'ios') {
-    return (
-      <SymbolView
-        name={map.ios as any}
-        tintColor={color}
-        size={22}
-        weight={focused ? 'semibold' : 'regular'}
-      />
-    );
+    return <SymbolView name={map.ios as never} tintColor={color} size={23} weight={focused ? 'bold' : 'regular'} />;
   }
-  return <Ionicons name={map.android} size={22} color={color} />;
+  return <Ionicons name={map.android} size={23} color={color} />;
 }
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
 const TABS: { name: string; key: TabKey; label: string }[] = [
   { name: 'index', key: 'home', label: 'Home' },
   { name: 'fuel', key: 'fuel', label: 'Fuel' },
@@ -48,85 +33,53 @@ const TABS: { name: string; key: TabKey; label: string }[] = [
   { name: 'garage', key: 'garage', label: 'Garage' },
 ];
 
-// ─── Pill Tab Bar ─────────────────────────────────────────────────────────────
+const PILL_HEIGHT = 76;
+
 /**
- * Custom tab bar rendered as a floating pill.
- *
- * Safe-area strategy:
- *  • We read useSafeAreaInsets() for the real bottom inset (home-indicator on
- *    iOS, gesture-nav bar on Android edge-to-edge).
- *  • The pill floats ABOVE the inset; the parent View's paddingBottom absorbs
- *    the inset so nothing is drawn behind system chrome.
- *  • We never hard-code a pixel offset — works on every device.
+ * Floating tab dock (Pilo style): a charcoal pill holding five circular slots. The
+ * active slot is a solid lime circle with a black icon; inactive slots are muted icons.
  */
-function PillTabBar({ state, descriptors, navigation }: any) {
+function PiloTabBar({ state, navigation }: any) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Pill sits 12 pt above the safe-area bottom
-  const floatGap = 12;
-
-  // Outer wrapper: full-width, sits at screen bottom, absorbs safe-area
-  const wrapperStyle: ViewStyle = {
+  const wrapper: ViewStyle = {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    paddingBottom: insets.bottom + floatGap,
-    paddingHorizontal: 16,
+    paddingBottom: Math.max(insets.bottom, 10) + 10,
     alignItems: 'center',
-    // Transparent — background is handled by the pill itself
     backgroundColor: 'transparent',
-    // Android edge-to-edge: ensure we extend into the inset region visually
-    ...(Platform.OS === 'android' && { paddingBottom: Math.max(insets.bottom, 8) + floatGap }),
-  };
-
-  const pillStyle: ViewStyle = {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    width: '100%',
-    height: 64,
-    borderRadius: 32,                      // full-pill
-    backgroundColor: isDark
-      ? 'rgba(22, 27, 39, 0.92)'           // dark glass
-      : 'rgba(255, 255, 255, 0.92)',       // light glass
-    // Soft border
-    borderWidth: 1,
-    borderColor: isDark
-      ? 'rgba(182, 242, 77, 0.10)'
-      : 'rgba(0, 0, 0, 0.07)',
-    // Depth
-    shadowColor: isDark ? '#000' : '#0D1117',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: isDark ? 0.55 : 0.14,
-    shadowRadius: 24,
-    elevation: 24,                         // Android shadow
-    paddingHorizontal: 8,
-    overflow: 'hidden',
   };
 
   return (
-    <View style={wrapperStyle} pointerEvents="box-none">
-      <View style={pillStyle}>
-        {state.routes.map((route: any, index: number) => {
-          const { options } = descriptors[route.key];
+    <View style={wrapper} pointerEvents="box-none">
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: space[1],
+          paddingHorizontal: space[2],
+          height: PILL_HEIGHT,
+          borderRadius: radius.pill,
+          backgroundColor: colors.surfaceElevated,
+          borderWidth: 1,
+          borderColor: colors.divider,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: isDark ? 0.5 : 0.16,
+          shadowRadius: 24,
+          elevation: 20,
+        }}
+      >
+        {state.routes.map((route: { key: string; name: string }, index: number) => {
           const focused = state.index === index;
           const tabKey = TABS[index]?.key ?? 'home';
-          const label = TABS[index]?.label ?? route.name;
-
-          const activeColor = colors.accent;
-          const inactiveColor = isDark ? colors.textMuted : colors.textMuted;
 
           const onPress = () => {
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-            if (!focused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
-
-          const onLongPress = () => {
-            navigation.emit({ type: 'tabLongPress', target: route.key });
+            if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
           };
 
           return (
@@ -134,42 +87,21 @@ function PillTabBar({ state, descriptors, navigation }: any) {
               key={route.key}
               accessibilityRole="button"
               accessibilityState={focused ? { selected: true } : {}}
-              accessibilityLabel={options.tabBarAccessibilityLabel}
-              testID={options.tabBarTestID}
+              accessibilityLabel={TABS[index]?.label}
               onPress={onPress}
-              onLongPress={onLongPress}
-              style={styles.tabItem}
-              android_ripple={{ color: 'transparent' }}
+              style={[
+                {
+                  width: 54,
+                  height: 54,
+                  borderRadius: 27,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: focused ? colors.accent : 'transparent',
+                },
+                focused && accentGlow(colors.accent),
+              ]}
             >
-              {/* Active indicator pill behind icon+label */}
-              {focused && (
-                <View
-                  style={[
-                    styles.activePill,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(182, 242, 77, 0.13)'
-                        : 'rgba(141, 200, 39, 0.12)',
-                    },
-                  ]}
-                />
-              )}
-
-              <TabIcon name={tabKey} color={focused ? activeColor : inactiveColor} focused={focused} />
-
-              <Text
-                style={[
-                  styles.label,
-                  {
-                    color: focused ? activeColor : inactiveColor,
-                    fontWeight: focused ? '700' : '500',
-                    opacity: focused ? 1 : 0.7,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {label}
-              </Text>
+              <TabIcon name={tabKey} color={focused ? colors.textOnAccent : colors.textMuted} focused={focused} />
             </Pressable>
           );
         })}
@@ -178,58 +110,20 @@ function PillTabBar({ state, descriptors, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 3,
-    position: 'relative',
-    borderRadius: 24,
-    minHeight: 48,           // WCAG touch target
-  },
-  activePill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 24,
-    marginHorizontal: 2,
-  },
-  label: {
-    fontSize: 10,
-    letterSpacing: 0.2,
-    includeFontPadding: false,  // Android: remove extra padding
-  },
-});
-
-// ─── Layout ───────────────────────────────────────────────────────────────────
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
-
-  // The pill is 64 pt tall + floatGap (12) + safe-area bottom + a tiny extra
-  // so screen content scrolls far enough to never hide behind the pill.
-  const tabBarHeight = 64 + 12 + Math.max(insets.bottom, 8);
+  const tabBarHeight = PILL_HEIGHT + 20 + Math.max(insets.bottom, 10);
 
   return (
     <Tabs
-      tabBar={(props) => <PillTabBar {...props} />}
+      tabBar={(props) => <PiloTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          paddingBottom: tabBarHeight
-        }
-        // Push screen content up so it doesn't hide behind the floating pill
+        tabBarStyle: { paddingBottom: tabBarHeight },
       }}
     >
       {TABS.map(({ name, label }) => (
-        <Tabs.Screen
-          key={name}
-          name={name}
-          options={{ title: label }}
-        />
+        <Tabs.Screen key={name} name={name} options={{ title: label }} />
       ))}
     </Tabs>
   );

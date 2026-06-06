@@ -1,6 +1,5 @@
 import { VehicleForm } from '@/src/components/sheets/VehicleForm';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { radius, space } from '@/src/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
@@ -21,20 +20,21 @@ export default function AddVehicleModal() {
                 accessibilityRole="button"
                 accessibilityLabel="Close"
                 hitSlop={8}
-                style={{
+                style={({ pressed }) => ({
                     position: 'absolute',
-                    top: insets.top + space[2],
-                    right: space[5],
-                    width: 44,
-                    height: 44,
-                    borderRadius: radius.pill,
+                    top: insets.top + 8,
+                    right: 20,
+                    width: 52,
+                    height: 52,
+                    borderRadius: 26,
                     backgroundColor: colors.surfaceElevated,
                     alignItems: 'center',
                     justifyContent: 'center',
                     zIndex: 10,
-                }}
+                    transform: [{ scale: pressed ? 0.94 : 1 }],
+                })}
             >
-                <Ionicons name="close" size={22} color={colors.textPrimary} />
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
             </Pressable>
             <VehicleForm onDone={close} />
         </View>

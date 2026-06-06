@@ -1,11 +1,15 @@
+// Lever: progressive disclosure — oil-change details only unfold when relevant,
+// and a lime "next due" card closes the loop so logging feels like planning ahead.
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useActiveVehicle } from '../../hooks/useActiveVehicle';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useServiceStore } from '../../store/service.store';
 import { useSettingsStore } from '../../store/settings.store';
 import { useTheme } from '../../theme/ThemeProvider';
-import { radius, space } from '../../theme/tokens';
+import { accentGlow, fontFamily, space } from '../../theme/tokens';
 import type { OilGrade, OilType, ServiceType } from '../../types';
 import { formatDistance } from '../../utils/format';
 import {
@@ -16,6 +20,7 @@ import {
   volumeUnitLabel,
 } from '../../utils/units';
 import { Button } from '../primitives/Button';
+import { Card } from '../primitives/Card';
 import { Chip } from '../primitives/Chip';
 import { Input } from '../primitives/Input';
 import { Sheet } from '../primitives/Sheet';
@@ -48,6 +53,7 @@ const OIL_TYPES: { value: OilType; label: string }[] = [
 
 export function AddServiceSheet({ visible, onClose }: Props) {
   const { colors } = useTheme();
+  const reduceMotion = useReduceMotion();
   const vehicle = useActiveVehicle();
   const addEntry = useServiceStore((s) => s.addEntry);
   const currency = useSettingsStore((s) => s.currency);
@@ -103,61 +109,68 @@ export function AddServiceSheet({ visible, onClose }: Props) {
 
   if (!vehicle) return null;
 
+  const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(360).delay(delay));
+  const nextDueParts = nextDueCanonical ? formatDistance(nextDueCanonical, distanceUnit).split(' ') : null;
+  const nextDueNumber = nextDueParts ? nextDueParts[0] : '';
+  const nextDueUnit = nextDueParts ? nextDueParts.slice(1).join(' ') : '';
+
   return (
     <Sheet visible={visible} onClose={onClose}>
       <ScrollView
-        contentContainerStyle={{ padding: space[5], gap: space[4] }}
+        contentContainerStyle={{ paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[6], gap: space[5] }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View>
-          <Text variant="title">Log service</Text>
-          <Text variant="caption" tone="secondary">{vehicle.nickname}</Text>
-        </View>
+        <Animated.View entering={enter(0)}>
+          <Text variant="micro" tone="secondary">LOG A SERVICE</Text>
+          <Text variant="display" numberOfLines={1} style={{ marginTop: space[1] }}>Maintenance</Text>
+          <Text variant="caption" tone="secondary" style={{ marginTop: space[1] }}>{vehicle.nickname}</Text>
+        </Animated.View>
 
-        <View>
-          <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
-            SERVICE TYPE
-          </Text>
+        <Animated.View entering={enter(60)} style={{ gap: space[3] }}>
+          <Text variant="label" tone="secondary">SERVICE TYPE</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
             {SERVICE_TYPES.map((t) => (
               <Chip key={t.value} label={t.label} selected={type === t.value} onPress={() => setType(t.value)} />
             ))}
           </View>
-        </View>
+        </Animated.View>
 
-        <View style={{ flexDirection: 'row', gap: space[3] }}>
-          <Input
-            label="Odometer"
-            placeholder="0"
-            keyboardType="number-pad"
-            value={odometer}
-            onChangeText={setOdometer}
-            suffix={distanceUnitLabel(distanceUnit)}
-            containerStyle={{ flex: 1 }}
-          />
-          <Input
-            label="Cost"
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-            value={cost}
-            onChangeText={setCost}
-            suffix={currency}
-            containerStyle={{ flex: 1 }}
-          />
-        </View>
+        <Animated.View entering={enter(120)}>
+          <View style={{ flexDirection: 'row', gap: space[3] }}>
+            <Input
+              label="Odometer"
+              placeholder="0"
+              keyboardType="number-pad"
+              value={odometer}
+              onChangeText={setOdometer}
+              suffix={distanceUnitLabel(distanceUnit)}
+              containerStyle={{ flex: 1 }}
+            />
+            <Input
+              label="Cost"
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+              value={cost}
+              onChangeText={setCost}
+              suffix={currency}
+              containerStyle={{ flex: 1 }}
+            />
+          </View>
+        </Animated.View>
 
         {type === 'oil-change' ? (
-          <>
-            <View>
-              <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>OIL GRADE</Text>
+          <Animated.View entering={enter(180)} style={{ gap: space[5] }}>
+            <View style={{ gap: space[3] }}>
+              <Text variant="label" tone="secondary">OIL GRADE</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                 {OIL_GRADES.map((g) => (
                   <Chip key={g} label={g} selected={oilGrade === g} onPress={() => setOilGrade(g)} />
                 ))}
               </View>
             </View>
-            <View>
-              <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>OIL TYPE</Text>
+            <View style={{ gap: space[3] }}>
+              <Text variant="label" tone="secondary">OIL TYPE</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                 {OIL_TYPES.map((o) => (
                   <Chip key={o.value} label={o.label} selected={oilType === o.value} onPress={() => setOilType(o.value)} />
@@ -172,34 +185,41 @@ export function AddServiceSheet({ visible, onClose }: Props) {
               onChangeText={setOilQty}
               suffix={volumeUnitLabel(volumeUnit)}
             />
-          </>
+          </Animated.View>
         ) : null}
 
-        <Input
-          label="Notes (optional)"
-          placeholder="Shop name, parts used, etc."
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-        />
+        <Animated.View entering={enter(220)}>
+          <Input
+            label="Notes (optional)"
+            placeholder="Shop name, parts used, etc."
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+          />
+        </Animated.View>
 
         {nextDueCanonical ? (
-          <View
-            style={{
-              paddingVertical: space[3],
-              paddingHorizontal: space[4],
-              borderRadius: radius.lg,
-              backgroundColor: colors.accentSoft,
-            }}
-          >
-            <Text variant="caption" tone="secondary">Next due at</Text>
-            <Text variant="bodyLg" weight="semibold" tone="accent">
-              {formatDistance(nextDueCanonical, distanceUnit)}
-            </Text>
-          </View>
+          <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(320)}>
+            <Card tone="lime" style={[{ overflow: 'hidden' }, accentGlow(colors.accent)]}>
+              <Text variant="micro" tone="onAccent" style={{ opacity: 0.65 }}>NEXT DUE AT</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2], marginTop: space[2] }}>
+                <Text
+                  numberOfLines={1}
+                  style={{ fontFamily: fontFamily.display, fontSize: 48, lineHeight: 60, letterSpacing: -1.2, color: colors.textOnAccent }}
+                >
+                  {nextDueNumber}
+                </Text>
+                <Text variant="bodyLg" tone="onAccent" weight="semibold" style={{ marginBottom: space[2], opacity: 0.8 }}>
+                  {nextDueUnit}
+                </Text>
+              </View>
+            </Card>
+          </Animated.View>
         ) : null}
 
-        <Button label="Save service" onPress={handleSave} disabled={!canSave} size="lg" fullWidth />
+        <Animated.View entering={enter(280)} style={{ marginTop: space[1] }}>
+          <Button label="Save service" onPress={handleSave} disabled={!canSave} size="lg" fullWidth />
+        </Animated.View>
       </ScrollView>
     </Sheet>
   );

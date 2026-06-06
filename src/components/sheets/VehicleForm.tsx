@@ -1,7 +1,11 @@
+// Lever: commitment + endowment — naming the car and seeing its avatar first makes
+// the vehicle feel owned, so the few fields that follow read as care, not chore.
 import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { IMAGES } from '../../constants/images';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useSettingsStore } from '../../store/settings.store';
 import { useVehicleStore } from '../../store/vehicle.store';
 import { space } from '../../theme/tokens';
@@ -33,9 +37,12 @@ interface Props {
     onDone: () => void;
     submitLabel?: string;
     footerSlot?: React.ReactNode;
+    /** When false, the form's own avatar+title header is hidden (the host screen provides one). */
+    showHeader?: boolean;
 }
 
-export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicle', footerSlot }: Props) {
+export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicle', footerSlot, showHeader = true }: Props) {
+    const reduceMotion = useReduceMotion();
     const addVehicle = useVehicleStore((s) => s.addVehicle);
     const updateVehicle = useVehicleStore((s) => s.updateVehicle);
     const distanceUnit = useSettingsStore((s) => s.distanceUnit);
@@ -80,49 +87,61 @@ export function VehicleForm({ initialVehicle, onDone, submitLabel = 'Save Vehicl
         onDone();
     };
 
+    const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(360).delay(delay));
+
     return (
         <ScrollView
-            contentContainerStyle={{ padding: space[6], paddingBottom: space[10], gap: space[4] }}
+            contentContainerStyle={{ paddingHorizontal: space[5], paddingTop: space[5], paddingBottom: space[10], gap: space[5] }}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
         >
-            <View style={{ alignItems: 'center', marginBottom: space[3] }}>
-                <Avatar source={IMAGES.addVehicle} size={160} tinted={false} />
-                <Text variant="title" style={{ marginTop: space[4], textAlign: 'center' }}>
-                    {initialVehicle ? 'Edit vehicle' : 'Add your vehicle'}
-                </Text>
-                <Text variant="body" tone="secondary" style={{ textAlign: 'center', marginTop: space[2], maxWidth: 300 }}>
-                    We use this to compute accurate fuel economy and service reminders.
-                </Text>
-            </View>
+            {showHeader ? (
+                <Animated.View entering={enter(0)} style={{ alignItems: 'center', marginBottom: space[2] }}>
+                    <Avatar source={IMAGES.addVehicle} size={148} tinted={false} />
+                    <Text variant="micro" tone="secondary" style={{ marginTop: space[4] }}>
+                        {initialVehicle ? 'EDIT VEHICLE' : 'NEW VEHICLE'}
+                    </Text>
+                    <Text variant="display" style={{ marginTop: space[1], textAlign: 'center' }}>
+                        {initialVehicle ? 'Your ride' : 'Add a ride'}
+                    </Text>
+                    <Text variant="body" tone="secondary" style={{ textAlign: 'center', marginTop: space[2], maxWidth: 300 }}>
+                        We use this to compute accurate fuel economy and service reminders.
+                    </Text>
+                </Animated.View>
+            ) : null}
 
-            <Input label="Nickname" placeholder="My Civic" value={nickname} onChangeText={setNickname} />
-            <View style={{ flexDirection: 'row', gap: space[3] }}>
-                <Input label="Make" placeholder="Honda" value={make} onChangeText={setMake} containerStyle={{ flex: 1 }} />
-                <Input label="Model" placeholder="Civic" value={model} onChangeText={setModel} containerStyle={{ flex: 1 }} />
-            </View>
-            <View style={{ flexDirection: 'row', gap: space[3] }}>
-                <Input label="Year" placeholder="2022" keyboardType="number-pad" value={year} onChangeText={setYear} containerStyle={{ flex: 1 }} />
-                <Input label="Plate" placeholder="ABC-123" value={plate} onChangeText={setPlate} containerStyle={{ flex: 1 }} />
-            </View>
+            <Animated.View entering={enter(60)} style={{ gap: space[4] }}>
+                <Input label="Nickname" placeholder="My Civic" value={nickname} onChangeText={setNickname} />
+                <View style={{ flexDirection: 'row', gap: space[3] }}>
+                    <Input label="Make" placeholder="Honda" value={make} onChangeText={setMake} containerStyle={{ flex: 1 }} />
+                    <Input label="Model" placeholder="Civic" value={model} onChangeText={setModel} containerStyle={{ flex: 1 }} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: space[3] }}>
+                    <Input label="Year" placeholder="2022" keyboardType="number-pad" value={year} onChangeText={setYear} containerStyle={{ flex: 1 }} />
+                    <Input label="Plate" placeholder="ABC-123" value={plate} onChangeText={setPlate} containerStyle={{ flex: 1 }} />
+                </View>
+            </Animated.View>
 
-            <View>
-                <Text variant="label" tone="secondary" style={{ marginBottom: space[2] }}>
-                    FUEL TYPE
-                </Text>
+            <Animated.View entering={enter(120)} style={{ gap: space[3] }}>
+                <Text variant="label" tone="secondary">FUEL TYPE</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                     {FUEL_TYPES.map((f) => (
                         <Chip key={f.value} label={f.label} selected={fuelType === f.value} onPress={() => setFuelType(f.value)} />
                     ))}
                 </View>
-            </View>
+            </Animated.View>
 
-            <View style={{ flexDirection: 'row', gap: space[3] }}>
-                <Input label={`Tank (${volumeUnitLabel(volumeUnit)})`} placeholder="50" keyboardType="decimal-pad" value={tankCap} onChangeText={setTankCap} suffix={volumeUnitLabel(volumeUnit)} containerStyle={{ flex: 1 }} />
-                <Input label="Odometer" placeholder="0" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} suffix={distanceUnitLabel(distanceUnit)} containerStyle={{ flex: 1 }} />
-            </View>
+            <Animated.View entering={enter(180)}>
+                <View style={{ flexDirection: 'row', gap: space[3] }}>
+                    <Input label={`Tank (${volumeUnitLabel(volumeUnit)})`} placeholder="50" keyboardType="decimal-pad" value={tankCap} onChangeText={setTankCap} suffix={volumeUnitLabel(volumeUnit)} containerStyle={{ flex: 1 }} />
+                    <Input label="Odometer" placeholder="0" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} suffix={distanceUnitLabel(distanceUnit)} containerStyle={{ flex: 1 }} />
+                </View>
+            </Animated.View>
 
-            <Button label={submitLabel} onPress={handleSave} disabled={!canSave} size="lg" fullWidth style={{ marginTop: space[4] }} />
-            {footerSlot}
+            <Animated.View entering={enter(240)} style={{ marginTop: space[2], gap: space[3] }}>
+                <Button label={submitLabel} onPress={handleSave} disabled={!canSave} size="lg" fullWidth />
+                {footerSlot}
+            </Animated.View>
         </ScrollView>
     );
 }

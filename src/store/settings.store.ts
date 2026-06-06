@@ -56,6 +56,8 @@ export const useSettingsStore = create<SettingsState>()(
             name: 'fuelio.settings',
             storage: createAsyncStorage(),
             version: 1,
+            // No-op migration seam: future schema bumps (version > 1) reshape `state` here.
+            migrate: (state, _version) => state as SettingsState,
         },
     ),
 );

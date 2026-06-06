@@ -54,6 +54,8 @@ export const useServiceStore = create<ServiceState>()(
       name: 'fuelio.service',
       storage: createAsyncStorage(),
       version: 1,
+      // No-op migration seam: future schema bumps (version > 1) reshape `state` here.
+      migrate: (state, _version) => state as ServiceState,
     },
   ),
 );

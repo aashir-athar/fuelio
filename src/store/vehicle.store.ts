@@ -7,6 +7,19 @@ import { useServiceStore } from './service.store';
 import { useSettingsStore } from './settings.store';
 import { createAsyncStorage } from './storage';
 
+/**
+ * Normalize free-text names: trim, collapse internal whitespace runs to a single
+ * space, and Title-Case each word. Fixes inconsistent casing like "sUZUk i" -> "Suzuk I".
+ */
+function titleCase(str: string): string {
+    return str
+        .trim()
+        .replace(/\s+/g, ' ')
+        .split(' ')
+        .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word))
+        .join(' ');
+}
+
 interface VehicleState {
     vehicles: Vehicle[];
     addVehicle: (data: Omit<Vehicle, 'id' | 'createdAt'>) => Vehicle;
@@ -24,6 +37,10 @@ export const useVehicleStore = create<VehicleState>()(
             addVehicle: (data) => {
                 const vehicle: Vehicle = {
                     ...data,
+                    nickname: data.nickname.trim(),
+                    make: titleCase(data.make),
+                    model: titleCase(data.model),
+                    licensePlate: data.licensePlate?.trim(),
                     id: createId('veh'),
                     createdAt: Date.now(),
                 };
@@ -34,10 +51,20 @@ export const useVehicleStore = create<VehicleState>()(
                 }
                 return vehicle;
             },
-            updateVehicle: (id, patch) =>
+            updateVehicle: (id, patch) => {
+                // Normalize only the fields actually present in the patch so we never
+                // clobber existing values with undefined.
+                const normalized: Partial<Vehicle> = { ...patch };
+                if (patch.nickname !== undefined) normalized.nickname = patch.nickname.trim();
+                if (patch.make !== undefined) normalized.make = titleCase(patch.make);
+                if (patch.model !== undefined) normalized.model = titleCase(patch.model);
+                if (patch.licensePlate !== undefined) {
+                    normalized.licensePlate = patch.licensePlate.trim();
+                }
                 set({
-                    vehicles: get().vehicles.map((v) => (v.id === id ? { ...v, ...patch } : v)),
-                }),
+                    vehicles: get().vehicles.map((v) => (v.id === id ? { ...v, ...normalized } : v)),
+                });
+            },
             deleteVehicle: (id) => {
                 // Cascade at the data layer (not the UI) so referential integrity can
                 // never be skipped by a future caller: drop the vehicle's fuel + service
@@ -73,6 +100,8 @@ export const useVehicleStore = create<VehicleState>()(
             name: 'fuelio.vehicles',
             storage: createAsyncStorage(),
             version: 1,
+            // No-op migration seam: future schema bumps (version > 1) reshape `state` here.
+            migrate: (state, _version) => state as VehicleState,
         },
     ),
 );

@@ -150,24 +150,32 @@ test('classifyEfficiency labels a clearly-better fill as good/excellent', () => 
   assert.equal(classifyEfficiency(6, base).label, 'poor');
 });
 
-// ── 14. A recorded tank level turns a partial fill into an EXACT measurement ──
-test('tank level makes a partial fill an exact measurement', () => {
-  // C=50. Full at odo 0 (level 50). Partial at odo 500: add 30 L, tank now 0.8 => 40 L.
-  // burned = 50 - 40 + 30 = 40 over 500 km => 12.5 km/L.
+// ── 14. The tank gauge level is IGNORED — only full tanks anchor a window ──────
+test('a recorded tank level does NOT create an exact window (gauge is ignored)', () => {
+  // A gauge can be inaccurate, so a recorded level must never become a measurement.
+  // Full at odo 0, then a partial at odo 500 with a level: with no closing full tank
+  // there is no measured economy at all.
   const e = [fill(0, 40, true), fill(500, 30, false, { level: 0.8 })];
   const s = computeStats(e, 'v1', 50, 'petrol');
-  assert.ok(approx(s.averageEfficiency, 12.5), `got ${s.averageEfficiency}`);
-  assert.equal(s.computableEntryCount, 1);
+  assert.equal(s.computableEntryCount, 0);
+  assert.ok(approx(s.averageEfficiency, 0), `got ${s.averageEfficiency}`);
+  const c = computeEntries(e, 'v1', 50, 'petrol');
+  assert.equal(c[1].isFullTankClosing, false); // a partial-with-level is not an anchor
 });
 
-// ── 15. Partial-ONLY (never fills full) still gets exact economy via levels ───
-test('partial-only with tank levels yields exact economy', () => {
-  // C=50. odo 0: add 20, level 0.5 (=25). odo 400: add 30, level 0.7 (=35).
-  // burned = 25 - 35 + 30 = 20 over 400 km => 20 km/L.
-  const e = [fill(0, 20, false, { level: 0.5 }), fill(400, 30, false, { level: 0.7 })];
+// ── 15. Partial-only economy comes from distance ÷ litres, never from the gauge ─
+test('partial-only economy comes from distance and litres, not tank levels', () => {
+  // Levels are present but ignored. Over a long-enough span estimatePartialEconomy
+  // gives the km÷litres figure; the gauge plays no part.
+  const e = [];
+  let odo = 0;
+  for (let k = 0; k < 8; k++) { e.push(fill(odo, 25, false, { level: 0.5 })); odo += 250; }
   const s = computeStats(e, 'v1', 50, 'petrol');
-  assert.ok(approx(s.averageEfficiency, 20), `got ${s.averageEfficiency}`);
-  assert.equal(s.computableEntryCount, 1);
+  assert.equal(s.computableEntryCount, 0); // the gauge never produces a measured window
+  const est = estimatePartialEconomy(e, 'v1', 50, 'petrol');
+  assert.ok(est, 'a km÷litres estimate should be produced');
+  // central = distance ÷ fuel added after the first fill = 1750 ÷ (7×25 = 175) = 10
+  assert.ok(approx(est.economyCentral, 1750 / 175, 0.01), `central ${est.economyCentral}`);
 });
 
 // ── 16. estimatePartialEconomy defers to the exact path when a window exists ──
@@ -190,14 +198,20 @@ test('estimatePartialEconomy brackets the true economy and centers on it', () =>
 
 // ── 18. estimatePartialEconomy anchors on the ENDPOINT fills, not an interior one
 test('estimatePartialEconomy uses first/last fill volumes as anchors (verifier fix)', () => {
-  // first=2 L splash, big 45 L interior, last=20 L. C=50. If it (wrongly) used the
-  // 45 L interior as an anchor the bounds would differ.
-  const e = [fill(0, 2, false), fill(600, 45, false), fill(1800, 20, false)];
+  // first=40 L, big 45 L interior, last=20 L. C=50. The endpoint volumes are chosen so
+  // the fuel-balance endpoint bounds land INSIDE the physical-plausibility clamp — so the
+  // ENDPOINT fills (not the 45 L interior, and not the clamp) drive the interval.
+  const e = [fill(0, 40, false), fill(600, 45, false), fill(1800, 20, false)];
   const est = estimatePartialEconomy(e, 'v1', 50, 'petrol');
   assert.ok(est);
   const D = 1800, fuelAfterFirst = 45 + 20; // 65
-  const burnedLo = Math.max(1e-6, fuelAfterFirst + 2 - 50); // fStart = first.liters = 2 -> 17
-  const burnedHi = fuelAfterFirst + 50 - 20;                // fEnd = last.liters = 20 -> 95
+  const bounds = { min: 3, max: 35 }; // petrol — must match EFFICIENCY_BOUNDS
+  const burnFloor = D / bounds.max; // 51.43 — physical floor (most-efficient case)
+  const burnCeil = D / bounds.min;  // 600   — physical ceil  (least-efficient case)
+  // Same clamp formulas as estimatePartialEconomy. fStart=40 -> endpoint 55 > 51.43 (endpoint
+  // drives burnedLo); fEnd=20 -> endpoint 95 < 600 (endpoint drives burnedHi).
+  const burnedLo = Math.max(burnFloor, fuelAfterFirst + 40 - 50, 1e-6); // -> 55
+  const burnedHi = Math.max(burnedLo, Math.min(burnCeil, fuelAfterFirst + 50 - 20)); // -> 95
   assert.ok(approx(est.economyMax, D / burnedLo, 0.05), `max ${est.economyMax} vs ${D / burnedLo}`);
   assert.ok(approx(est.economyMin, D / burnedHi, 0.05), `min ${est.economyMin} vs ${D / burnedHi}`);
 });

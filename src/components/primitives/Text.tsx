@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text as RNText, type TextProps, type TextStyle } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
-import { font } from '../../theme/tokens';
+import { font, fontFamily } from '../../theme/tokens';
 
 type Variant =
     | 'display'
@@ -21,6 +21,18 @@ interface Props extends TextProps {
     children?: React.ReactNode;
 }
 
+// Custom fonts don't respond to fontWeight — map a requested weight to its Inter family.
+const WEIGHT_FAMILY: Record<keyof typeof font.weight, string> = {
+    regular: fontFamily.regular,
+    medium: fontFamily.medium,
+    semibold: fontFamily.semibold,
+    bold: fontFamily.bold,
+    heavy: fontFamily.bold,
+};
+
+// Variants that use the Manjari display family (weight prop is ignored for these).
+const DISPLAY_VARIANTS: ReadonlySet<Variant> = new Set(['display', 'title', 'heading']);
+
 export const Text = React.memo(function Text({
     variant = 'body',
     tone = 'primary',
@@ -34,21 +46,21 @@ export const Text = React.memo(function Text({
     const variantStyle: TextStyle = (() => {
         switch (variant) {
             case 'display':
-                return { fontSize: font.size.display, fontWeight: font.weight.heavy, letterSpacing: font.letter.tight, lineHeight: 48 };
+                return { fontFamily: fontFamily.display, fontSize: font.size.display, letterSpacing: -1.5, lineHeight: Math.round(font.size.display * 1.24) };
             case 'title':
-                return { fontSize: font.size.xxl, fontWeight: font.weight.bold, letterSpacing: font.letter.tight, lineHeight: 38 };
+                return { fontFamily: fontFamily.display, fontSize: font.size.xxl, letterSpacing: -0.8, lineHeight: Math.round(font.size.xxl * 1.24) };
             case 'heading':
-                return { fontSize: font.size.xl, fontWeight: font.weight.bold, letterSpacing: font.letter.tight, lineHeight: 30 };
+                return { fontFamily: fontFamily.display, fontSize: font.size.xl, letterSpacing: -0.4, lineHeight: Math.round(font.size.xl * 1.24) };
             case 'bodyLg':
-                return { fontSize: font.size.md, fontWeight: font.weight.regular, lineHeight: 24 };
+                return { fontFamily: fontFamily.regular, fontSize: font.size.md, lineHeight: 25 };
             case 'body':
-                return { fontSize: font.size.base, fontWeight: font.weight.regular, lineHeight: 22 };
+                return { fontFamily: fontFamily.regular, fontSize: font.size.base, lineHeight: 22 };
             case 'label':
-                return { fontSize: font.size.sm, fontWeight: font.weight.semibold, letterSpacing: font.letter.wide, lineHeight: 18 };
+                return { fontFamily: fontFamily.semibold, fontSize: font.size.xs, letterSpacing: 1.1, lineHeight: 16 };
             case 'caption':
-                return { fontSize: font.size.sm, fontWeight: font.weight.regular, lineHeight: 18 };
+                return { fontFamily: fontFamily.regular, fontSize: font.size.sm, lineHeight: 18 };
             case 'micro':
-                return { fontSize: font.size.xs, fontWeight: font.weight.medium, letterSpacing: font.letter.wide, lineHeight: 14 };
+                return { fontFamily: fontFamily.medium, fontSize: font.size.xs, letterSpacing: 0.6, lineHeight: 14 };
         }
     })();
 
@@ -65,15 +77,13 @@ export const Text = React.memo(function Text({
         }
     })();
 
+    // Weight overrides the family only for Inter (body/label) variants.
+    const weightFamily = weight && !DISPLAY_VARIANTS.has(variant) ? { fontFamily: WEIGHT_FAMILY[weight] } : null;
+
     return (
         <RNText
             {...rest}
-            style={[
-                variantStyle,
-                { color },
-                weight ? { fontWeight: font.weight[weight] } : null,
-                style,
-            ]}
+            style={[variantStyle, { color }, weightFamily, style]}
         >
             {children}
         </RNText>

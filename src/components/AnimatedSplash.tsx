@@ -1,31 +1,37 @@
 import { Image } from 'expo-image';
 import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text as RNText, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withTiming,
 } from 'react-native-reanimated';
 import { useReduceMotion } from '../hooks/useReduceMotion';
+import { fontFamily } from '../theme/tokens';
 
-/** Matches app.json's native splash background so the handoff is seamless. */
+/** Fixed brand colors — the splash is always dark + lime regardless of theme. */
 const SPLASH_BG = '#0D1117';
-const MIN_VISIBLE_MS = 1500;
+const LIME = '#B6F24D';
+const MIN_VISIBLE_MS = 1750;
 
 /**
- * Animated splash overlay. Plays over the app once the native splash hides, then
- * fades out and unmounts. The app renders underneath the whole time, so if Lottie
- * fails to render for any reason the worst case is a brief branded fade — never a
- * broken screen. Honors Reduce Motion (static brand mark, no Lottie).
+ * Animated brand splash. Plays over the app once the native splash hides: the mark
+ * springs in inside a sweeping lime ring with a soft glow, the FUELIO wordmark rises,
+ * then the whole thing fades out and unmounts. The app renders underneath, so it can
+ * never block startup. Honors Reduce Motion (static, no Lottie).
  */
 export function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
   const reduceMotion = useReduceMotion();
   const opacity = useSharedValue(1);
-  const iconScale = useSharedValue(reduceMotion ? 1 : 0.7);
+  const iconScale = useSharedValue(reduceMotion ? 1 : 0.55);
   const iconOpacity = useSharedValue(reduceMotion ? 1 : 0);
+  const wordY = useSharedValue(reduceMotion ? 0 : 16);
+  const wordOpacity = useSharedValue(reduceMotion ? 1 : 0);
+  const underline = useSharedValue(reduceMotion ? 1 : 0);
   const [visible, setVisible] = useState(true);
 
   const hide = useCallback(() => {
@@ -35,60 +41,54 @@ export function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
 
   useEffect(() => {
     if (!reduceMotion) {
-      iconOpacity.value = withTiming(1, { duration: 400 });
-      iconScale.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.6)) });
+      iconOpacity.value = withTiming(1, { duration: 360 });
+      iconScale.value = withTiming(1, { duration: 680, easing: Easing.out(Easing.back(2)) });
+      wordOpacity.value = withDelay(360, withTiming(1, { duration: 420 }));
+      wordY.value = withDelay(360, withTiming(0, { duration: 520, easing: Easing.out(Easing.cubic) }));
+      underline.value = withDelay(680, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }));
     }
     const timer = setTimeout(() => {
-      opacity.value = withTiming(0, { duration: 420, easing: Easing.in(Easing.ease) }, (finished) => {
+      opacity.value = withTiming(0, { duration: 460, easing: Easing.in(Easing.ease) }, (finished) => {
         if (finished) runOnJS(hide)();
       });
     }, MIN_VISIBLE_MS);
     return () => clearTimeout(timer);
-  }, [reduceMotion, hide, opacity, iconOpacity, iconScale]);
+  }, [reduceMotion, hide, opacity, iconOpacity, iconScale, wordOpacity, wordY, underline]);
 
   const containerStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  const iconStyle = useAnimatedStyle(() => ({
-    opacity: iconOpacity.value,
-    transform: [{ scale: iconScale.value }],
-  }));
+  const iconStyle = useAnimatedStyle(() => ({ opacity: iconOpacity.value, transform: [{ scale: iconScale.value }] }));
+  const wordStyle = useAnimatedStyle(() => ({ opacity: wordOpacity.value, transform: [{ translateY: wordY.value }] }));
+  const underlineStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: underline.value }] }));
 
   if (!visible) return null;
 
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.container, containerStyle]}>
-      {reduceMotion ? null : (
-        <LottieView
-          source={require('../../assets/lottie/splash.json')}
-          autoPlay
-          loop
-          style={styles.lottie}
-        />
-      )}
-      <Animated.View style={iconStyle}>
-        <Image
-          source={require('../../assets/images/splash-icon.png')}
-          style={styles.icon}
-          contentFit="contain"
-        />
+      <View style={styles.markBox}>
+        <View style={styles.glow} />
+        {reduceMotion ? null : (
+          <LottieView source={require('../../assets/lottie/splash.json')} autoPlay loop={false} style={styles.ring} />
+        )}
+        <Animated.View style={iconStyle}>
+          <Image source={require('../../assets/images/icon.png')} style={styles.icon} contentFit="contain" />
+        </Animated.View>
+      </View>
+
+      <Animated.View style={[styles.wordWrap, wordStyle]}>
+        <RNText style={styles.word}>FUELIO</RNText>
+        <Animated.View style={[styles.underline, underlineStyle]} />
       </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: SPLASH_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  lottie: {
-    position: 'absolute',
-    width: 248,
-    height: 248,
-  },
-  icon: {
-    width: 108,
-    height: 108,
-  },
+  container: { backgroundColor: SPLASH_BG, alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  markBox: { width: 240, height: 240, alignItems: 'center', justifyContent: 'center' },
+  glow: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: LIME, opacity: 0.12 },
+  ring: { position: 'absolute', width: 240, height: 240 },
+  icon: { width: 132, height: 132 },
+  wordWrap: { marginTop: 26, alignItems: 'center' },
+  word: { fontFamily: fontFamily.display, fontSize: 42, letterSpacing: -1, color: LIME },
+  underline: { marginTop: 10, height: 4, width: 72, borderRadius: 2, backgroundColor: LIME },
 });

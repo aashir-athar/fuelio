@@ -1,5 +1,5 @@
-// Lever: Endowed progress + Fitts's Law — a clear active-vehicle anchor and an
-// edge-reachable add affordance keep the most frequent garage action one tap away.
+// Lever: Endowed progress + Fitts's Law — a bold garage headline anchors the count,
+// and an edge-reachable lime add affordance keeps the most frequent action one tap away.
 import { VehicleCard } from '@/src/components/cards/VehicleCard';
 import { Button } from '@/src/components/primitives/Button';
 import { EmptyState } from '@/src/components/primitives/EmptyState';
@@ -10,12 +10,12 @@ import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useVehicleStore } from '@/src/store/vehicle.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { radius, space, spring } from '@/src/theme/tokens';
+import { accentGlow, fontFamily, radius, space, spring } from '@/src/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -54,46 +54,60 @@ export default function GarageScreen() {
     const count = vehicles.length;
     const activeVehicle = vehicles.find((v) => v.id === activeId) ?? null;
 
+    const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(380).delay(delay));
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
                 contentContainerStyle={{
-                    paddingTop: insets.top + space[3],
-                    paddingBottom: insets.bottom + 120,
+                    paddingTop: insets.top + space[4],
+                    paddingBottom: insets.bottom + 130,
                     paddingHorizontal: space[5],
                 }}
                 showsVerticalScrollIndicator={false}
             >
+                {/* Header — big rounded garage headline + count */}
                 <View
                     style={{
                         flexDirection: 'row',
                         justifyContent: 'space-between',
                         alignItems: 'flex-start',
+                        marginBottom: space[6],
                     }}
                 >
                     <View style={{ flex: 1, paddingRight: space[4] }}>
-                        <Text variant="caption" tone="secondary">Garage</Text>
-                        <Text variant="title" style={{ marginTop: 2 }}>
-                            {count} {count === 1 ? 'vehicle' : 'vehicles'}
-                        </Text>
+                        <Text variant="micro" tone="secondary">GARAGE</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space[3], marginTop: space[1] }}>
+                            <Text style={{ fontFamily: fontFamily.display, fontSize: 56, lineHeight: 58, letterSpacing: -1.5, color: colors.textPrimary }}>
+                                {count}
+                            </Text>
+                            <Text variant="bodyLg" tone="secondary" weight="semibold">
+                                {count === 1 ? 'vehicle' : 'vehicles'}
+                            </Text>
+                        </View>
                         {activeVehicle ? (
                             <View
                                 style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
                                     gap: space[2],
-                                    marginTop: space[2],
+                                    marginTop: space[3],
+                                    alignSelf: 'flex-start',
+                                    paddingHorizontal: space[3],
+                                    paddingVertical: space[2],
+                                    borderRadius: radius.pill,
+                                    backgroundColor: colors.surfaceElevated,
                                 }}
                             >
                                 <View
                                     style={{
-                                        width: 6,
-                                        height: 6,
+                                        width: 7,
+                                        height: 7,
                                         borderRadius: radius.pill,
                                         backgroundColor: colors.accent,
                                     }}
                                 />
-                                <Text variant="caption" tone="secondary" numberOfLines={1}>
+                                <Text variant="micro" tone="secondary" weight="semibold" numberOfLines={1}>
                                     Tracking {activeVehicle.nickname}
                                 </Text>
                             </View>
@@ -111,21 +125,17 @@ export default function GarageScreen() {
                         style={[
                             addStyle,
                             {
-                                width: 48,
-                                height: 48,
+                                width: 56,
+                                height: 56,
                                 borderRadius: radius.pill,
                                 backgroundColor: colors.accent,
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                shadowColor: colors.accent,
-                                shadowOpacity: 0.28,
-                                shadowRadius: 14,
-                                shadowOffset: { width: 0, height: 6 },
-                                elevation: 6,
                             },
+                            accentGlow(colors.accent),
                         ]}
                     >
-                        <Ionicons name="add" size={26} color={colors.textOnAccent} />
+                        <Ionicons name="add" size={28} color={colors.textOnAccent} />
                     </AnimatedPressable>
                 </View>
 
@@ -140,25 +150,28 @@ export default function GarageScreen() {
                         />
                     </View>
                 ) : (
-                    <View style={{ gap: space[3], marginTop: space[6] }}>
-                        {vehicles.map((v) => (
-                            <VehicleCard
-                                key={v.id}
-                                vehicle={v}
-                                active={v.id === activeId}
-                                onPress={() => handleSelect(v.id)}
-                            />
+                    <View style={{ gap: space[3] }}>
+                        {vehicles.map((v, i) => (
+                            <Animated.View key={v.id} entering={enter(i * 70)}>
+                                <VehicleCard
+                                    vehicle={v}
+                                    active={v.id === activeId}
+                                    onPress={() => handleSelect(v.id)}
+                                />
+                            </Animated.View>
                         ))}
 
-                        <Button
-                            label="Add another vehicle"
-                            onPress={goAdd}
-                            variant="secondary"
-                            size="lg"
-                            fullWidth
-                            leftIcon={<Ionicons name="add" size={20} color={colors.textPrimary} />}
-                            style={{ marginTop: space[3] }}
-                        />
+                        <Animated.View entering={enter(vehicles.length * 70)}>
+                            <Button
+                                label="Add another vehicle"
+                                onPress={goAdd}
+                                variant="primary"
+                                size="lg"
+                                fullWidth
+                                leftIcon={<Ionicons name="add" size={20} color={colors.textOnAccent} />}
+                                style={{ marginTop: space[3] }}
+                            />
+                        </Animated.View>
                     </View>
                 )}
             </ScrollView>

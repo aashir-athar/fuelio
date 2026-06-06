@@ -1,12 +1,16 @@
+// Lever: reversibility + planning — inline validation and a lime "next due" card turn
+// editing into forward-looking maintenance, not bookkeeping; delete stays guarded.
 import { Button } from '@/src/components/primitives/Button';
+import { Card } from '@/src/components/primitives/Card';
 import { Chip } from '@/src/components/primitives/Chip';
 import { Input } from '@/src/components/primitives/Input';
 import { Text } from '@/src/components/primitives/Text';
 import { useHaptics } from '@/src/hooks/useHaptics';
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { useServiceStore } from '@/src/store/service.store';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { useTheme } from '@/src/theme/ThemeProvider';
-import { radius, space } from '@/src/theme/tokens';
+import { accentGlow, fontFamily, space } from '@/src/theme/tokens';
 import type { OilGrade, OilType, ServiceType } from '@/src/types';
 import { formatDistance } from '@/src/utils/format';
 import {
@@ -28,6 +32,7 @@ import {
     ScrollView,
     View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -69,6 +74,7 @@ export default function EditServiceModal() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const reduceMotion = useReduceMotion();
     const haptic = useHaptics();
 
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -124,10 +130,11 @@ export default function EditServiceModal() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: space[4],
+                    paddingHorizontal: space[6],
                 }}
             >
-                <Text>Entry not found.</Text>
-                <Button label="Close" onPress={() => router.back()} />
+                <Text variant="title" style={{ textAlign: 'center' }}>Entry not found</Text>
+                <Button label="Close" onPress={() => router.back()} fullWidth />
             </View>
         );
     }
@@ -187,6 +194,11 @@ export default function EditServiceModal() {
             ? displayToKm(odoNum, distanceUnit) + selectedServiceType.interval
             : null;
 
+    const enter = (delay: number) => (reduceMotion ? undefined : FadeInDown.duration(360).delay(delay));
+    const nextDueParts = previewNextDue !== null ? formatDistance(previewNextDue, distanceUnit).split(' ') : null;
+    const nextDueNumber = nextDueParts ? nextDueParts[0] : '';
+    const nextDueUnit = nextDueParts ? nextDueParts.slice(1).join(' ') : '';
+
     // ─────────────────────────────────────────────────────────────────────────
 
     return (
@@ -199,20 +211,25 @@ export default function EditServiceModal() {
                 style={{
                     flexDirection: 'row',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     paddingHorizontal: space[5],
-                    paddingVertical: space[4],
+                    paddingTop: insets.top + space[3],
+                    paddingBottom: space[4],
                 }}
             >
-                <Text variant="heading">Edit service</Text>
+                <View style={{ flex: 1, paddingRight: space[4] }}>
+                    <Text variant="micro" tone="secondary">SERVICE ENTRY</Text>
+                    <Text variant="title" numberOfLines={1} style={{ marginTop: space[1] }}>Edit service</Text>
+                </View>
                 <Pressable
                     onPress={() => router.back()}
                     accessibilityRole="button"
                     accessibilityLabel="Close"
+                    hitSlop={8}
                     style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
                         backgroundColor: colors.surfaceElevated,
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -224,22 +241,17 @@ export default function EditServiceModal() {
 
             <ScrollView
                 contentContainerStyle={{
-                    padding: space[5],
-                    gap: space[4],
-                    paddingBottom: insets.bottom + space[5],
+                    paddingHorizontal: space[5],
+                    paddingTop: space[2],
+                    gap: space[5],
+                    paddingBottom: insets.bottom + space[6],
                 }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
             >
                 {/* Service type selector */}
-                <View>
-                    <Text
-                        variant="label"
-                        tone="secondary"
-                        style={{ marginBottom: space[2] }}
-                    >
-                        SERVICE TYPE
-                    </Text>
+                <Animated.View entering={enter(0)} style={{ gap: space[3] }}>
+                    <Text variant="label" tone="secondary">SERVICE TYPE</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                         {SERVICE_TYPES.map((t) => (
                             <Chip
@@ -250,41 +262,37 @@ export default function EditServiceModal() {
                             />
                         ))}
                     </View>
-                </View>
+                </Animated.View>
 
                 {/* Odometer + Cost */}
-                <View style={{ flexDirection: 'row', gap: space[3] }}>
-                    <Input
-                        label="Odometer"
-                        keyboardType="number-pad"
-                        value={odometer}
-                        onChangeText={setOdometer}
-                        suffix={distanceUnitLabel(distanceUnit)}
-                        error={odometerError}
-                        containerStyle={{ flex: 1 }}
-                    />
-                    <Input
-                        label="Cost"
-                        keyboardType="decimal-pad"
-                        value={cost}
-                        onChangeText={setCost}
-                        suffix={currency}
-                        error={costError}
-                        containerStyle={{ flex: 1 }}
-                    />
-                </View>
+                <Animated.View entering={enter(60)}>
+                    <View style={{ flexDirection: 'row', gap: space[3] }}>
+                        <Input
+                            label="Odometer"
+                            keyboardType="number-pad"
+                            value={odometer}
+                            onChangeText={setOdometer}
+                            suffix={distanceUnitLabel(distanceUnit)}
+                            error={odometerError}
+                            containerStyle={{ flex: 1 }}
+                        />
+                        <Input
+                            label="Cost"
+                            keyboardType="decimal-pad"
+                            value={cost}
+                            onChangeText={setCost}
+                            suffix={currency}
+                            error={costError}
+                            containerStyle={{ flex: 1 }}
+                        />
+                    </View>
+                </Animated.View>
 
                 {/* Oil-change specific fields */}
                 {type === 'oil-change' ? (
-                    <>
-                        <View>
-                            <Text
-                                variant="label"
-                                tone="secondary"
-                                style={{ marginBottom: space[2] }}
-                            >
-                                OIL GRADE
-                            </Text>
+                    <Animated.View entering={enter(120)} style={{ gap: space[5] }}>
+                        <View style={{ gap: space[3] }}>
+                            <Text variant="label" tone="secondary">OIL GRADE</Text>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                                 {OIL_GRADES.map((g) => (
                                     <Chip
@@ -297,14 +305,8 @@ export default function EditServiceModal() {
                             </View>
                         </View>
 
-                        <View>
-                            <Text
-                                variant="label"
-                                tone="secondary"
-                                style={{ marginBottom: space[2] }}
-                            >
-                                OIL TYPE
-                            </Text>
+                        <View style={{ gap: space[3] }}>
+                            <Text variant="label" tone="secondary">OIL TYPE</Text>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                                 {OIL_TYPES.map((o) => (
                                     <Chip
@@ -325,51 +327,56 @@ export default function EditServiceModal() {
                             onChangeText={setOilQty}
                             suffix={volumeUnitLabel(volumeUnit)}
                         />
-                    </>
+                    </Animated.View>
                 ) : null}
 
                 {/* Notes */}
-                <Input
-                    label="Notes (optional)"
-                    placeholder="Shop name, parts used, etc."
-                    value={notes}
-                    onChangeText={setNotes}
-                    multiline
-                />
+                <Animated.View entering={enter(160)}>
+                    <Input
+                        label="Notes (optional)"
+                        placeholder="Shop name, parts used, etc."
+                        value={notes}
+                        onChangeText={setNotes}
+                        multiline
+                    />
+                </Animated.View>
 
-                {/* Next-due preview */}
+                {/* Next-due preview — lime card */}
                 {previewNextDue !== null ? (
-                    <View
-                        style={{
-                            paddingVertical: space[3],
-                            paddingHorizontal: space[4],
-                            borderRadius: radius.lg,
-                            backgroundColor: colors.accentSoft,
-                        }}
-                    >
-                        <Text variant="caption" tone="secondary">
-                            Next due at
-                        </Text>
-                        <Text variant="bodyLg" weight="semibold" tone="accent">
-                            {formatDistance(previewNextDue, distanceUnit)}
-                        </Text>
-                    </View>
+                    <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(320)}>
+                        <Card tone="lime" style={[{ overflow: 'hidden' }, accentGlow(colors.accent)]}>
+                            <Text variant="micro" tone="onAccent" style={{ opacity: 0.65 }}>NEXT DUE AT</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[2], marginTop: space[2] }}>
+                                <Text
+                                    numberOfLines={1}
+                                    style={{ fontFamily: fontFamily.display, fontSize: 48, lineHeight: 52, letterSpacing: -1.2, color: colors.textOnAccent }}
+                                >
+                                    {nextDueNumber}
+                                </Text>
+                                <Text variant="bodyLg" tone="onAccent" weight="semibold" style={{ marginBottom: space[2], opacity: 0.8 }}>
+                                    {nextDueUnit}
+                                </Text>
+                            </View>
+                        </Card>
+                    </Animated.View>
                 ) : null}
 
                 {/* Actions */}
-                <Button
-                    label="Save changes"
-                    onPress={handleSave}
-                    disabled={!canSave}
-                    size="lg"
-                    fullWidth
-                />
-                <Button
-                    label="Delete entry"
-                    onPress={handleDelete}
-                    variant="danger"
-                    fullWidth
-                />
+                <Animated.View entering={enter(200)} style={{ gap: space[3], marginTop: space[1] }}>
+                    <Button
+                        label="Save changes"
+                        onPress={handleSave}
+                        disabled={!canSave}
+                        size="lg"
+                        fullWidth
+                    />
+                    <Button
+                        label="Delete entry"
+                        onPress={handleDelete}
+                        variant="danger"
+                        fullWidth
+                    />
+                </Animated.View>
             </ScrollView>
         </KeyboardAvoidingView>
     );

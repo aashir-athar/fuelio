@@ -26,6 +26,19 @@ export const radius = {
   pill: 999,
 } as const;
 
+/**
+ * Pilo-inspired type families. Manjari (rounded geometric) carries display + headings;
+ * Inter carries body/labels. Custom fonts ignore fontWeight, so we map weight -> family.
+ */
+export const fontFamily = {
+  display: 'Manjari_700Bold',
+  displayRegular: 'Manjari_400Regular',
+  bold: 'Inter_700Bold',
+  semibold: 'Inter_600SemiBold',
+  medium: 'Inter_500Medium',
+  regular: 'Inter_400Regular',
+} as const;
+
 export const font = {
   size: {
     xs: 11,
@@ -33,9 +46,10 @@ export const font = {
     base: 15,
     md: 17,
     lg: 20,
-    xl: 24,
-    xxl: 32,
-    display: 44,
+    xl: 26,
+    xxl: 36,
+    display: 56,
+    huge: 76,
   },
   weight: {
     regular: '400' as const,
